@@ -1058,25 +1058,31 @@ def create_scene_image(text, title, culture, scene_num, total_scenes, frame=0, s
     return img
 
 # Generate video function with FFmpeg for high quality
-def generate_video(story_data, output_dir, voice_id=None):
-    """Generate a high-quality story video using FFmpeg with transitions.
+def generate_video(story_data, output_dir, voice_id=None, progress_callback=None):
+    """Generate a high-quality story video using FFmpeg with AI image slideshow.
     
     Args:
         story_data: dict with title, story, etc.
         output_dir: directory to save output files
         voice_id: optional voice ID for narration
+        progress_callback: optional callback for progress updates
     """
+    
+    def update_progress(msg):
+        if progress_callback:
+            progress_callback(msg)
     
     title = story_data['title']
     story = story_data['story']
     culture = st.session_state.get('culture', '🇮🇳 Indian')
+    culture_short = culture.split(' ', 1)[1] if ' ' in culture else culture
     
     # Split story into scenes (paragraphs)
     paragraphs = [p.strip() for p in story.split('\n') if p.strip()]
     if not paragraphs:
         paragraphs = [story[:300]]
     
-    # Limit to 5 scenes
+    # Limit to 5 scenes for video
     scenes = paragraphs[:5]
     
     try:
@@ -1084,14 +1090,15 @@ def generate_video(story_data, output_dir, voice_id=None):
         temp_dir = Path(output_dir)
         temp_dir.mkdir(exist_ok=True)
         
+        update_progress("🎙️ Generating audio narration...")
+        
         # Generate audio first with selected voice
         audio_path = temp_dir / "narration.mp3"
         generate_audio(story, str(audio_path), voice_id=voice_id)
         
-        # Get audio duration - try multiple methods
-        audio_duration = 30  # Default fallback
+        # Get audio duration
+        audio_duration = 30  # Default
         
-        # Try MoviePy first (most reliable)
         if MOVIEPY_AVAILABLE:
             try:
                 audio_clip = AudioFileClip(str(audio_path))
@@ -1099,7 +1106,6 @@ def generate_video(story_data, output_dir, voice_id=None):
                 audio_clip.close()
             except:
                 pass
-        # Try FFmpeg probe as backup
         elif FFMPEG_AVAILABLE:
             try:
                 probe = ffmpeg.probe(str(audio_path))
@@ -1109,65 +1115,61 @@ def generate_video(story_data, output_dir, voice_id=None):
         
         scene_duration = audio_duration / len(scenes)
         
-        # Generate AI scenery images for each scene
-        culture_short = culture.split(' ', 1)[1] if ' ' in culture else culture
+        update_progress("🎨 Generating AI images for each scene...")
+        
+        # Generate AI images for each scene
         image_paths = []
+        import time
+        base_seed = int(time.time() * 1000)
         
         for i, scene_text in enumerate(scenes):
-            img_path = temp_dir / f"scene_{i}.png"
+            update_progress(f"🎨 Creating scene {i+1}/{len(scenes)}...")
             
-            # Create prompt from scene text for AI image generation
-            # Extract key visual elements from the scene
-            scene_keywords = scene_text[:100].replace('\n', ' ')
+            img_path = temp_dir / f"scene_{i:03d}.png"
+            scene_keywords = scene_text[:120].replace('\n', ' ').replace('"', '')
+            scene_seed = base_seed + i * 1000
             
-            # Generate unique seed for each scene
-            import time
-            scene_seed = int(time.time() * 1000) + i
+            # Create visual prompt
+            visual_prompt = f"Beautiful cinematic illustration: {scene_keywords}. {culture_short} cultural art style, dramatic lighting, fantasy illustration, painterly, atmospheric, no text, high quality"
             
-            # Create visual prompt for the scene
-            visual_prompt = f"Cinematic illustration of: {scene_keywords}. {culture_short} cultural style, beautiful scenery, dramatic lighting, fantasy art, painterly style, no text, 4k quality"
-            encoded_prompt = urllib.parse.quote(visual_prompt)
-            
-            # Fetch AI-generated image from Pollinations.ai with retry
+            # Try to fetch AI image
             img_loaded = False
-            for attempt in range(3):  # Try up to 3 times
+            for attempt in range(2):  # 2 attempts per scene
                 try:
+                    encoded_prompt = urllib.parse.quote(visual_prompt[:500])  # Limit prompt length
                     img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&nologo=true&seed={scene_seed + attempt}"
-                    response = requests.get(img_url, timeout=60)  # Increased timeout
                     
-                    if response.status_code == 200 and len(response.content) > 1000:  # Check content size
-                        # Load AI image - NO TEXT OVERLAY (captions will be separate)
+                    response = requests.get(img_url, timeout=45, headers={
+                        'User-Agent': 'Mozilla/5.0 (compatible; Ikshanam/1.0)',
+                        'Accept': 'image/*'
+                    })
+                    
+                    if response.status_code == 200 and len(response.content) > 5000:
                         ai_img = Image.open(BytesIO(response.content)).convert('RGB')
                         ai_img = ai_img.resize((1280, 720), Image.Resampling.LANCZOS)
-                        
-                        # Save clean image without text
-                        ai_img.save(str(img_path), quality=95)
+                        ai_img.save(str(img_path), 'PNG', quality=95)
                         image_paths.append(str(img_path))
                         img_loaded = True
                         break
                 except Exception as e:
-                    if attempt < 2:  # Retry
-                        time.sleep(1)
-                        continue
+                    time.sleep(0.5)
+                    continue
             
-            # Fallback: create beautiful gradient background if AI image failed
+            # Fallback: create gradient with cultural theme
             if not img_loaded:
-                # Create gradient background based on culture
+                update_progress(f"⚠️ Using fallback for scene {i+1}...")
                 gradient_colors = {
-                    'Indian': [(255, 153, 51), (128, 0, 128)],  # Orange to purple
-                    'Japanese': [(255, 183, 197), (100, 149, 237)],  # Pink to blue
-                    'African': [(255, 140, 0), (139, 69, 19)],  # Dark orange to brown
-                    'Celtic': [(34, 139, 34), (75, 0, 130)],  # Green to indigo
-                    'Chinese': [(255, 0, 0), (255, 215, 0)],  # Red to gold
-                    'Greek': [(30, 144, 255), (255, 255, 255)],  # Blue to white
-                    'Egyptian': [(255, 215, 0), (139, 69, 19)],  # Gold to brown
-                    'Native American': [(210, 105, 30), (34, 139, 34)],  # Brown to green
+                    'Indian': [(139, 69, 19), (255, 140, 0)],
+                    'Japanese': [(255, 182, 193), (135, 206, 235)],
+                    'African': [(255, 165, 0), (101, 67, 33)],
+                    'Celtic': [(34, 139, 34), (75, 0, 130)],
+                    'Chinese': [(178, 34, 34), (255, 215, 0)],
+                    'Greek': [(70, 130, 180), (245, 245, 245)],
+                    'Arabian': [(139, 90, 43), (218, 165, 32)],
+                    'Native American': [(139, 90, 43), (46, 139, 87)],
                 }
+                colors = gradient_colors.get(culture_short, [(30, 30, 60), (60, 30, 60)])
                 
-                # Get colors for current culture or default
-                colors = gradient_colors.get(culture_short, [(50, 50, 100), (100, 50, 80)])
-                
-                # Create gradient image
                 fallback_img = Image.new('RGB', (1280, 720))
                 for y in range(720):
                     ratio = y / 720
@@ -1177,13 +1179,13 @@ def generate_video(story_data, output_dir, voice_id=None):
                     for x in range(1280):
                         fallback_img.putpixel((x, y), (r, g, b))
                 
-                fallback_img.save(str(img_path), quality=95)
+                fallback_img.save(str(img_path), 'PNG')
                 image_paths.append(str(img_path))
         
-        # Generate SRT subtitle file - one sentence at a time
+        # Generate SRT subtitle file
+        update_progress("📝 Creating subtitles...")
         srt_path = temp_dir / "captions.srt"
         
-        # Format time as HH:MM:SS,mmm
         def format_srt_time(seconds):
             hours = int(seconds // 3600)
             minutes = int((seconds % 3600) // 60)
@@ -1191,84 +1193,97 @@ def generate_video(story_data, output_dir, voice_id=None):
             millis = int((seconds % 1) * 1000)
             return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
         
-        # Split all text into sentences
+        # Split into sentences for subtitles
         import re
         all_sentences = []
         for scene_text in scenes:
-            # Split by sentence-ending punctuation
             sentences = re.split(r'(?<=[.!?])\s+', scene_text.strip())
             sentences = [s.strip() for s in sentences if s.strip()]
             all_sentences.extend(sentences)
         
-        # Calculate time per sentence based on word count (better sync)
-        # Estimate speaking rate: ~150 words per minute = 2.5 words per second
-        total_words = sum(len(s.split()) for s in all_sentences)
-        if total_words > 0:
-            time_per_word = audio_duration / total_words
-        else:
-            time_per_word = 0.4  # Default: 0.4 seconds per word
+        time_per_word = audio_duration / max(1, sum(len(s.split()) for s in all_sentences))
         
         with open(srt_path, 'w', encoding='utf-8') as srt_file:
             current_time = 0
             for i, sentence in enumerate(all_sentences):
                 word_count = len(sentence.split())
                 sentence_duration = word_count * time_per_word
-                
-                # Exact timing - no overlap, no lead time
                 start_time = current_time
-                end_time = current_time + sentence_duration - 0.05  # Small gap to prevent overlap
+                end_time = current_time + sentence_duration - 0.05
                 current_time = current_time + sentence_duration
                 
-                # Write SRT entry - one sentence at a time
                 srt_file.write(f"{i + 1}\n")
                 srt_file.write(f"{format_srt_time(start_time)} --> {format_srt_time(end_time)}\n")
                 srt_file.write(f"{sentence}\n\n")
         
-        video_path = temp_dir / "story_video.mp4"
-        temp_video = temp_dir / "temp_video.mp4"
+        update_progress("🎬 Creating video with FFmpeg...")
         
-        # Try Movis first for best quality with animations
-        if MOVIS_AVAILABLE:
+        video_path = temp_dir / "story_video.mp4"
+        
+        # Try FFmpeg first (best quality with transitions)
+        if FFMPEG_AVAILABLE:
             try:
-                # Create composition with movis
-                composition = mv.Composition(size=(1280, 720), duration=audio_duration)
+                # Create a file list for FFmpeg concat
+                filelist_path = temp_dir / "filelist.txt"
+                with open(filelist_path, 'w') as f:
+                    for img_path in image_paths:
+                        f.write(f"file '{img_path}'\n")
+                        f.write(f"duration {scene_duration}\n")
+                    # Add last image again for smooth ending
+                    f.write(f"file '{image_paths[-1]}'\n")
                 
-                # Add each scene with zoom animation and crossfade
-                for i, img_path in enumerate(image_paths):
-                    start_time = i * scene_duration
+                # FFmpeg command for slideshow with Ken Burns effect (zoom)
+                # Using concat demuxer for smooth transitions
+                temp_video = temp_dir / "temp_video.mp4"
+                
+                import subprocess
+                
+                # Create slideshow video
+                cmd1 = [
+                    'ffmpeg', '-y',
+                    '-f', 'concat', '-safe', '0', '-i', str(filelist_path),
+                    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,zoompan=z=\'min(zoom+0.0005,1.2)\':d=1:x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':s=1280x720:fps=30',
+                    '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+                    '-t', str(audio_duration),
+                    '-r', '30',
+                    str(temp_video)
+                ]
+                
+                result1 = subprocess.run(cmd1, capture_output=True, timeout=180)
+                
+                if temp_video.exists():
+                    # Add audio
+                    cmd2 = [
+                        'ffmpeg', '-y',
+                        '-i', str(temp_video),
+                        '-i', str(audio_path),
+                        '-c:v', 'copy',
+                        '-c:a', 'aac', '-b:a', '192k',
+                        '-shortest',
+                        str(video_path)
+                    ]
                     
-                    # Create image layer with Ken Burns zoom effect
-                    layer = mv.layer.Image(img_path, duration=scene_duration + 0.5)  # Slight overlap for crossfade
+                    result2 = subprocess.run(cmd2, capture_output=True, timeout=120)
                     
-                    # Add subtle zoom animation (1.0 to 1.1 scale)
-                    layer.scale.enable_motion().extend([0, scene_duration], [1.0, 1.05])
+                    # Cleanup temp
+                    if temp_video.exists():
+                        os.remove(temp_video)
+                    if filelist_path.exists():
+                        os.remove(filelist_path)
                     
-                    # Add layer to composition
-                    composition.add_layer(layer, name=f"scene_{i}", offset=start_time)
-                    
-                    # Add crossfade by controlling opacity
-                    if i > 0:
-                        layer.opacity.enable_motion().extend([0, 0.5], [0, 1.0])  # Fade in
-                
-                # Add audio track
-                audio_layer = mv.layer.Audio(str(audio_path))
-                composition.add_layer(audio_layer, name="narration")
-                
-                # Export video
-                video_path = temp_dir / "story_video.mp4"
-                composition.write_video(str(video_path), fps=30, codec="libx264", audio_codec="aac")
-                
-                # Cleanup images
-                for img_path in image_paths:
-                    if os.path.exists(img_path):
-                        os.remove(img_path)
-                
-                return str(video_path), str(srt_path), None
+                    if video_path.exists():
+                        # Cleanup images
+                        for img_path in image_paths:
+                            if os.path.exists(img_path):
+                                os.remove(img_path)
+                        return str(video_path), str(srt_path), None
                 
             except Exception as e:
-                pass  # Fall back to MoviePy
+                pass  # Fall through to MoviePy
         
-        # Fallback to MoviePy
+        # Fallback to MoviePy if FFmpeg failed
+        update_progress("🎬 Using MoviePy fallback...")
+        
         if MOVIEPY_AVAILABLE:
             try:
                 audio_clip = AudioFileClip(str(audio_path))
@@ -1281,8 +1296,6 @@ def generate_video(story_data, output_dir, voice_id=None):
                 final_clip = concatenate_videoclips(clips, method="compose")
                 final_clip = final_clip.with_audio(audio_clip)
                 
-                # Export video
-                video_path = temp_dir / "story_video.mp4"
                 final_clip.write_videofile(
                     str(video_path),
                     fps=24,
@@ -1302,12 +1315,11 @@ def generate_video(story_data, output_dir, voice_id=None):
                 return str(video_path), str(srt_path), None
                 
             except Exception as e:
-                pass  # Try next method
+                pass
         
-        # Fallback to imageio
+        # Final fallback to imageio
         if IMAGEIO_AVAILABLE:
-            fps = max(1, int(24 / scene_duration)) if scene_duration > 0 else 24
-            video_path = temp_dir / "story_video.mp4"
+            update_progress("🎬 Using imageio fallback...")
             writer = imageio.get_writer(str(video_path), fps=24)
             
             for img_path in image_paths:
@@ -1317,7 +1329,6 @@ def generate_video(story_data, output_dir, voice_id=None):
             
             writer.close()
             
-            # Cleanup images
             for img_path in image_paths:
                 if os.path.exists(img_path):
                     os.remove(img_path)
@@ -1441,33 +1452,7 @@ if st.session_state.get('story_data'):
     st.markdown(f'<h2 class="story-title">📜 {data["title"]}</h2>', unsafe_allow_html=True)
     st.markdown(f'<p class="story-meta">{current_culture} • {current_type} • {current_tone}</p>', unsafe_allow_html=True)
     
-    # Display AI-generated background image
-    bg_prompt = st.session_state.get('bg_image_prompt', '')
-    bg_seed = st.session_state.get('bg_image_seed', 0)
-    
-    if bg_prompt:
-        # Check if we already have the image data cached
-        if st.session_state.get('bg_image_data') is None:
-            with st.spinner('✨ Generating AI illustration...'):
-                img = fetch_story_illustration(bg_prompt, bg_seed)
-                if img:
-                    # Convert to bytes for storage and display
-                    img_buffer = BytesIO()
-                    img.save(img_buffer, format='PNG', quality=95)
-                    st.session_state['bg_image_data'] = img_buffer.getvalue()
-        
-        # Display the cached image
-        if st.session_state.get('bg_image_data'):
-            st.image(
-                st.session_state['bg_image_data'],
-                caption='✨ AI-Generated Story Illustration',
-                width='stretch'  # Full width
-            )
-        else:
-            # Fallback: show a placeholder message
-            st.info('🎨 AI illustration is being generated... Refresh if not visible.')
-    
-    # Story content
+    # Story content FIRST (non-blocking)
     st.markdown(f"""
     <div class="story-box">
         {data['story'].replace(chr(10), '<br>')}
@@ -1509,8 +1494,7 @@ if st.session_state.get('story_data'):
             "swedish": "Moral",
             "polish": "Morał",
         }
-        
-        # Get the selected language and find translation
+                    # Get the selected language and find translation
         selected_lang = st.session_state.get('story_language', 'English').lower()
         moral_label = moral_translations.get(selected_lang, "Moral")
         
@@ -1519,6 +1503,41 @@ if st.session_state.get('story_data'):
             <strong>✨ {moral_label}:</strong> {data['moral']}
         </div>
         """, unsafe_allow_html=True)
+    
+    # AI Illustration Section (non-blocking - user clicks to generate)
+    st.markdown('<h3 class="media-header">🎨 AI Story Illustration</h3>', unsafe_allow_html=True)
+    
+    # Check if we already have image cached
+    if st.session_state.get('bg_image_data'):
+        st.image(
+            st.session_state['bg_image_data'],
+            caption='✨ AI-Generated Story Illustration',
+            use_container_width=True
+        )
+        if st.button("🔄 Regenerate Illustration", key="regen_img_btn"):
+            st.session_state['bg_image_data'] = None
+            st.rerun()
+    else:
+        # Button to generate image (non-blocking)
+        if st.button("🎨 Generate AI Illustration", key="gen_img_btn", type="secondary"):
+            bg_prompt = st.session_state.get('bg_image_prompt', '')
+            bg_seed = st.session_state.get('bg_image_seed', 0)
+            
+            if bg_prompt:
+                with st.spinner('✨ Generating AI illustration (this may take 30-60 seconds)...'):
+                    try:
+                        img = fetch_story_illustration(bg_prompt, bg_seed)
+                        if img:
+                            img_buffer = BytesIO()
+                            img.save(img_buffer, format='PNG', quality=95)
+                            st.session_state['bg_image_data'] = img_buffer.getvalue()
+                            st.rerun()
+                        else:
+                            st.warning('⚠️ Could not generate image. Pollinations.ai may be busy. Try again!')
+                    except Exception as e:
+                        st.error(f'❌ Image generation failed: {str(e)}')
+            else:
+                st.info('Generate a story first to create an illustration.')
     
     st.divider()
     
@@ -1558,42 +1577,48 @@ if st.session_state.get('story_data'):
     
     # Handle video generation
     if video_btn:
-        with st.spinner("🎬 Creating story video... This may take a minute."):
-            with tempfile.TemporaryDirectory() as temp_dir:
-                video_path, srt_path, error = generate_video(data, temp_dir, voice_id=selected_voice)
-                if error:
-                    st.error(f"Video error: {error}")
-                else:
-                    # Copy to persistent location
-                    output_dir = Path("outputs")
-                    output_dir.mkdir(exist_ok=True)
-                    import shutil
+        progress_placeholder = st.empty()
+        progress_placeholder.info("🎬 Starting video generation...")
+        
+        def update_progress(msg):
+            progress_placeholder.info(msg)
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            video_path, srt_path, error = generate_video(data, temp_dir, voice_id=selected_voice, progress_callback=update_progress)
+            if error:
+                st.error(f"Video error: {error}")
+            else:
+                # Copy to persistent location
+                output_dir = Path("outputs")
+                output_dir.mkdir(exist_ok=True)
+                import shutil
+                
+                # Save video
+                final_video = output_dir / "story_video.mp4"
+                shutil.copy(video_path, str(final_video))
+                st.session_state['video_path'] = str(final_video)
+                
+                # Mark that we have a new video (to reset playback position)
+                st.session_state['new_video_generated'] = True
+                
+                # Convert SRT to VTT and store content for HTML5 video subtitles
+                if srt_path and os.path.exists(srt_path):
+                    final_srt = output_dir / "captions.srt"
+                    shutil.copy(srt_path, str(final_srt))
+                    st.session_state['srt_path'] = str(final_srt)
                     
-                    # Save video
-                    final_video = output_dir / "story_video.mp4"
-                    shutil.copy(video_path, str(final_video))
-                    st.session_state['video_path'] = str(final_video)
+                    # Convert SRT to VTT format for HTML5 video
+                    with open(srt_path, 'r', encoding='utf-8') as f:
+                        srt_content = f.read()
                     
-                    # Mark that we have a new video (to reset playback position)
-                    st.session_state['new_video_generated'] = True
-                    
-                    # Convert SRT to VTT and store content for HTML5 video subtitles
-                    if srt_path and os.path.exists(srt_path):
-                        final_srt = output_dir / "captions.srt"
-                        shutil.copy(srt_path, str(final_srt))
-                        st.session_state['srt_path'] = str(final_srt)
-                        
-                        # Convert SRT to VTT format for HTML5 video
-                        with open(srt_path, 'r', encoding='utf-8') as f:
-                            srt_content = f.read()
-                        
-                        # Convert SRT to VTT
-                        vtt_content = "WEBVTT\n\n"
-                        # Replace comma with period in timestamps (SRT uses comma, VTT uses period)
-                        vtt_content += srt_content.replace(',', '.')
-                        st.session_state['vtt_content'] = vtt_content
-                    
-                    st.rerun()
+                    # Convert SRT to VTT
+                    vtt_content = "WEBVTT\n\n"
+                    # Replace comma with period in timestamps (SRT uses comma, VTT uses period)
+                    vtt_content += srt_content.replace(',', '.')
+                    st.session_state['vtt_content'] = vtt_content
+                
+                progress_placeholder.success("✅ Video generated successfully!")
+                st.rerun()
     
     # Display audio player
     if st.session_state.get('audio_path') and os.path.exists(st.session_state['audio_path']):
