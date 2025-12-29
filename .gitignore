@@ -19,3 +19,7 @@ outputs/
 
 # Accidentally exposed API key file (delete this file!)
 gsk_*
+
+# MoviePy temp files
+*TEMP_MPY*
+*.mp4.tmp

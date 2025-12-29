@@ -1,7 +1,6 @@
 """
 Ikshanam - A Smart Cultural Storyteller - Streamlit App
 A simple demo app for learning purposes using free tools only.
-Uses GROQ API for fast AI story generation for video.
 """
 import streamlit as st
 import os
@@ -76,6 +75,83 @@ try:
     IMAGEIO_AVAILABLE = True
 except ImportError:
     IMAGEIO_AVAILABLE = False
+
+# ============== HUGGING FACE IMAGE GENERATION ==============
+def generate_story_image(title, culture, story_summary=""):
+    """
+    Generate a culturally relevant image for the story using Hugging Face Inference API.
+    Falls back to Pollinations.ai and Picsum if HF fails.
+    
+    Args:
+        title: Story title
+        culture: Culture (e.g., "🇮🇳 Indian")
+        story_summary: First 100 chars of story for context
+    
+    Returns:
+        Image bytes or None
+    """
+    import time
+    
+    # Extract culture name
+    culture_name = culture.split(' ', 1)[1] if ' ' in culture else culture
+    
+    # Create a detailed, culturally relevant prompt
+    prompt = f"Beautiful digital art illustration for a {culture_name} folk tale titled '{title}'. " \
+             f"{culture_name} cultural elements, traditional artistic style, vibrant colors, " \
+             f"mystical atmosphere, fantasy art, highly detailed, 4k quality"
+    
+    # Hugging Face Inference API (free, no API key needed for public models)
+    HF_MODELS = [
+        "black-forest-labs/FLUX.1-schnell",  # Fast FLUX model
+        "stabilityai/stable-diffusion-xl-base-1.0",  # SDXL
+    ]
+    
+    for model in HF_MODELS:
+        try:
+            api_url = f"https://api-inference.huggingface.co/models/{model}"
+            headers = {"Content-Type": "application/json"}
+            payload = {"inputs": prompt}
+            
+            response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+            
+            if response.status_code == 200 and len(response.content) > 5000:
+                # Verify it's actually an image
+                try:
+                    img = Image.open(BytesIO(response.content))
+                    img.verify()
+                    return response.content
+                except:
+                    continue
+            elif response.status_code == 503:
+                # Model loading, wait and retry
+                time.sleep(5)
+                response = requests.post(api_url, headers=headers, json=payload, timeout=45)
+                if response.status_code == 200 and len(response.content) > 5000:
+                    return response.content
+        except:
+            continue
+    
+    # Fallback 1: Pollinations.ai with cultural prompt
+    try:
+        simple_prompt = f"{culture_name} folklore art beautiful mystical"
+        encoded = urllib.parse.quote(simple_prompt)
+        url = f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&nologo=true&seed={int(time.time())}"
+        response = requests.get(url, timeout=25)
+        if response.status_code == 200 and len(response.content) > 5000:
+            return response.content
+    except:
+        pass
+    
+    # Fallback 2: Picsum (random beautiful photos)
+    try:
+        picsum_url = f"https://picsum.photos/600/400?random={int(time.time())}"
+        response = requests.get(picsum_url, allow_redirects=True, timeout=10)
+        if response.status_code == 200 and len(response.content) > 3000:
+            return response.content
+    except:
+        pass
+    
+    return None
 
 # Page config
 st.set_page_config(
@@ -1085,41 +1161,69 @@ def generate_video(story_data, output_dir, voice_id=None):
             import time
             scene_seed = int(time.time() * 1000) + i
             
-            # Simplified prompts that work better with Pollinations.ai
-            simple_prompts = [
-                f"{culture_short} folklore scene, beautiful, mystical, fantasy art",
-                f"{culture_short} traditional art, peaceful nature scene",
-                f"fantasy landscape, mystical, beautiful colors"
-            ]
+            # Create scene-specific prompt using actual scene content
+            scene_keywords = scene_text[:80].replace('\n', ' ').strip()
             
-            # Fetch AI-generated image from Pollinations.ai with retry
+            # Detailed prompt for scene
+            scene_prompt = f"Digital art illustration for {culture_short} folk tale: {scene_keywords}. " \
+                          f"{culture_short} cultural style, traditional art elements, vibrant colors, fantasy art"
+            
+            # Try Hugging Face first for best quality
             img_loaded = False
-            for attempt, prompt in enumerate(simple_prompts):
+            try:
+                api_url = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
+                headers = {"Content-Type": "application/json"}
+                payload = {"inputs": scene_prompt}
+                
+                response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+                
+                if response.status_code == 200 and len(response.content) > 5000:
+                    ai_img = Image.open(BytesIO(response.content)).convert('RGB')
+                    ai_img = ai_img.resize((1280, 720), Image.Resampling.LANCZOS)
+                    ai_img.save(str(img_path), quality=95)
+                    image_paths.append(str(img_path))
+                    img_loaded = True
+            except:
+                pass
+            
+            # Fallback: Pollinations.ai
+            if not img_loaded:
+                simple_prompts = [
+                    f"{culture_short} folklore scene, beautiful, mystical, fantasy art",
+                    f"{culture_short} traditional art, peaceful scene",
+                    f"fantasy landscape, mystical, beautiful"
+                ]
+                for prompt in simple_prompts:
+                    try:
+                        encoded_prompt = urllib.parse.quote(prompt)
+                        img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=512&height=512&nologo=true&seed={scene_seed}"
+                        response = requests.get(img_url, timeout=20)
+                        if response.status_code == 200 and len(response.content) > 5000:
+                            ai_img = Image.open(BytesIO(response.content)).convert('RGB')
+                            ai_img = ai_img.resize((1280, 720), Image.Resampling.LANCZOS)
+                            ai_img.save(str(img_path), quality=95)
+                            image_paths.append(str(img_path))
+                            img_loaded = True
+                            break
+                    except:
+                        continue
+            
+            # Fallback 1: Try Picsum.photos (reliable, beautiful random photos)
+            if not img_loaded:
                 try:
-                    encoded_prompt = urllib.parse.quote(prompt)
-                    img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&nologo=true&seed={scene_seed + attempt}"
-                    
-                    response = requests.get(img_url, timeout=90)
-                    
+                    # Picsum provides random high-quality photos
+                    picsum_url = f"https://picsum.photos/1280/720?random={scene_seed}"
+                    response = requests.get(picsum_url, allow_redirects=True)
                     if response.status_code == 200 and len(response.content) > 5000:
-                        # Load AI image
                         ai_img = Image.open(BytesIO(response.content)).convert('RGB')
                         ai_img = ai_img.resize((1280, 720), Image.Resampling.LANCZOS)
-                        
-                        # Save clean image without text
                         ai_img.save(str(img_path), quality=95)
                         image_paths.append(str(img_path))
                         img_loaded = True
-                        break
-                    elif response.status_code == 500:
-                        time.sleep(2)
-                        continue
-                except Exception as e:
-                    if attempt < 2:
-                        time.sleep(1)
-                        continue
+                except:
+                    pass
             
-            # Fallback: create beautiful gradient background if AI image failed
+            # Fallback 2: Create gradient background if all image APIs failed
             if not img_loaded:
                 # Create gradient background based on culture
                 gradient_colors = {
@@ -1318,7 +1422,7 @@ if 'show_captions' not in st.session_state:
 
 # Main generate button
 if st.sidebar.button("🎬 Generate Story", type="primary", use_container_width=True):
-    with st.spinner("✨ Weaving your cultural tale..."):
+    with st.spinner("✨ Weaving an enchanting story for you..."):
         # Always generate story in English first
         story_text, error = generate_story(culture, story_type, tone, "English", custom_prompt)
         
@@ -1385,15 +1489,12 @@ if st.sidebar.button("🎬 Generate Story", type="primary", use_container_width=
             st.session_state['audio_path'] = None
             st.session_state['video_path'] = None
             st.session_state['translated_story'] = None
-            st.session_state['bg_image_data'] = None  # Will be loaded separately
+            st.session_state['bg_image_data'] = None
             
-            # Prepare image URL for later loading (don't block story display!)
+            # Set flag to load image on next render (after story is displayed)
+            st.session_state['needs_image_load'] = True
             import time
-            unique_seed = int(time.time() * 1000)
-            culture_short = culture.split(' ', 1)[1] if ' ' in culture else culture
-            prompt = f"{culture_short} folklore art, mystical, beautiful, fantasy"
-            encoded_prompt = urllib.parse.quote(prompt)
-            st.session_state['bg_image_url'] = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=400&nologo=true&seed={unique_seed}"
+            st.session_state['image_seed'] = int(time.time() * 1000)
 
 # Display story if available, otherwise show welcome page
 if st.session_state.get('story_data'):
@@ -1402,46 +1503,23 @@ if st.session_state.get('story_data'):
     current_type = st.session_state.get('story_type', story_type)
     current_tone = st.session_state.get('tone', tone)
     bg_image_data = st.session_state.get('bg_image_data', None)
-    bg_image_url = st.session_state.get('bg_image_url', None)
     
     # Title with custom styling
     st.markdown(f'<h2 class="story-title">📜 {data["title"]}</h2>', unsafe_allow_html=True)
     st.markdown(f'<p class="story-meta">{current_culture} • {current_type} • {current_tone}</p>', unsafe_allow_html=True)
     
-    # Display AI-generated background image if available
+    # Image section - BEFORE story text, AFTER title
     if bg_image_data:
+        # Image is ready - display it
         try:
             st.image(bg_image_data, caption="✨ AI-Generated Story Illustration", use_container_width=True)
-        except Exception as img_display_err:
+        except:
             pass
-    elif bg_image_url:
-        # Show button to load image (doesn't block story display!)
-        if st.button("🎨 Load AI Illustration", key="load_illustration"):
-            with st.spinner("🎨 Generating AI illustration... (may take up to 60 seconds)"):
-                # Try multiple simpler prompts
-                culture_short = current_culture.split(' ', 1)[1] if ' ' in current_culture else current_culture
-                prompts = [
-                    f"{culture_short} art fantasy beautiful",
-                    "beautiful fantasy landscape art",
-                    "mystical nature painting"
-                ]
-                success = False
-                for prompt in prompts:
-                    try:
-                        encoded = urllib.parse.quote(prompt)
-                        url = f"https://image.pollinations.ai/prompt/{encoded}?width=800&height=400&nologo=true"
-                        img_response = requests.get(url, timeout=45)
-                        if img_response.status_code == 200 and len(img_response.content) > 5000:
-                            st.session_state['bg_image_data'] = img_response.content
-                            success = True
-                            st.rerun()
-                            break
-                    except:
-                        continue
-                if not success:
-                    st.warning("⚠️ AI image service is currently unavailable. Please try again later.")
+    elif st.session_state.get('needs_image_load'):
+        # Show a loading message (not blocking spinner)
+        st.info("🎨 AI illustration is being generated... It will appear here when ready.")
     
-    # Story content
+    # Story content - ALWAYS shown immediately
     st.markdown(f"""
     <div class="story-box">
         {data['story'].replace(chr(10), '<br>')}
@@ -1962,3 +2040,23 @@ st.markdown("""
     <small>Powered by GROQ AI (Llama 3.3) • Built for Learning</small>
 </div>
 """, unsafe_allow_html=True)
+
+# ============== BACKGROUND IMAGE LOADING ==============
+# This runs AFTER all content is displayed, so everything shows immediately
+if st.session_state.get('needs_image_load') and st.session_state.get('story_data'):
+    story_data = st.session_state.get('story_data')
+    current_culture = st.session_state.get('culture', '🇮🇳 Indian')
+    
+    # Use the new generate_story_image function for culturally relevant images
+    story_title = story_data.get('title', 'Story')
+    story_text = story_data.get('story', '')[:150]  # First 150 chars for context
+    
+    image_data = generate_story_image(story_title, current_culture, story_text)
+    
+    if image_data:
+        st.session_state['bg_image_data'] = image_data
+        st.session_state['needs_image_load'] = False
+        st.rerun()
+    else:
+        # Mark as done even if failed to avoid infinite loop
+        st.session_state['needs_image_load'] = False
