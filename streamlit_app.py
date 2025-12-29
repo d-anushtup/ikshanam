@@ -1,6 +1,7 @@
 """
 Ikshanam - A Smart Cultural Storyteller - Streamlit App
 A simple demo app for learning purposes using free tools only.
+Uses GROQ API for fast AI story generation for video.
 """
 import streamlit as st
 import os
@@ -75,90 +76,6 @@ try:
     IMAGEIO_AVAILABLE = True
 except ImportError:
     IMAGEIO_AVAILABLE = False
-
-# ============== HUGGING FACE IMAGE GENERATION ==============
-# Import huggingface_hub for InferenceClient
-try:
-    from huggingface_hub import InferenceClient
-    HF_AVAILABLE = True
-except ImportError:
-    HF_AVAILABLE = False
-
-def generate_story_image(title, culture, story_summary=""):
-    """
-    Generate a culturally relevant image for the story using Hugging Face FLUX.1-schnell.
-    Creates prompts based on story title and culture for relevant images.
-    
-    Args:
-        title: Story title
-        culture: Culture (e.g., "🇮🇳 Indian")
-        story_summary: First part of story for context
-    
-    Returns:
-        Image bytes or None
-    """
-    import time
-    
-    # Extract culture name
-    culture_name = culture.split(' ', 1)[1] if ' ' in culture else culture
-    
-    # Clean the title for prompt
-    clean_title = title.replace('"', '').replace("'", "")[:50]
-    
-    # Create detailed, culturally relevant prompt
-    prompt = f"Vibrant {culture_name} folktale scene: {clean_title}, traditional art style, " \
-             f"warm lighting, mystical atmosphere, fantasy illustration, detailed, beautiful colors"
-    
-    # Try Hugging Face FLUX.1-schnell first
-    if HF_AVAILABLE:
-        hf_token = os.getenv("HF_TOKEN")
-        if hf_token:
-            try:
-                client = InferenceClient(api_key=hf_token)
-                image = client.text_to_image(
-                    prompt,
-                    model="black-forest-labs/FLUX.1-schnell"
-                )
-                # Convert PIL Image to bytes
-                img_bytes = BytesIO()
-                image.save(img_bytes, format='PNG')
-                return img_bytes.getvalue()
-            except Exception as e:
-                pass  # Fall through to alternatives
-    
-    # Fallback: Pollinations.ai with story-specific prompts
-    prompts = [
-        f"{culture_name} folk tale '{clean_title}', digital art, vibrant colors, mystical atmosphere",
-        f"{culture_name} mythology illustration, {clean_title}, traditional art style",
-        f"Beautiful {culture_name} cultural art, fantasy scene, mystical"
-    ]
-    
-    for p in prompts:
-        try:
-            encoded = urllib.parse.quote(p)
-            seed = int(time.time() * 1000) % 100000
-            url = f"https://image.pollinations.ai/prompt/{encoded}?width=600&height=400&nologo=true&seed={seed}"
-            response = requests.get(url, timeout=25)
-            if response.status_code == 200 and len(response.content) > 5000:
-                try:
-                    img = Image.open(BytesIO(response.content))
-                    img.verify()
-                    return response.content
-                except:
-                    continue
-        except:
-            continue
-    
-    # Final fallback: Picsum
-    try:
-        picsum_url = f"https://picsum.photos/600/400?random={int(time.time())}"
-        response = requests.get(picsum_url, allow_redirects=True, timeout=10)
-        if response.status_code == 200 and len(response.content) > 3000:
-            return response.content
-    except:
-        pass
-    
-    return None
 
 # Page config
 st.set_page_config(
@@ -983,6 +900,41 @@ def generate_story_images(title, culture, story_summary):
     
     return images if images else None
 
+# Fetch AI-generated story illustration using Pollinations.ai
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_story_illustration(prompt, seed, width=1200, height=600):
+    """Fetch AI-generated image from Pollinations.ai with caching and retry logic."""
+    import time
+    
+    encoded_prompt = urllib.parse.quote(prompt)
+    
+    # Try multiple times with different models/seeds
+    for attempt in range(3):
+        try:
+            # Pollinations.ai endpoint - add model parameter for consistency
+            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&nologo=true&seed={seed + attempt}"
+            
+            # Longer timeout since image generation takes time
+            response = requests.get(url, timeout=90, headers={
+                'User-Agent': 'Mozilla/5.0 (compatible; Ikshanam/1.0)',
+                'Accept': 'image/*'
+            })
+            
+            if response.status_code == 200 and len(response.content) > 5000:
+                # Valid image received
+                img = Image.open(BytesIO(response.content))
+                return img
+        except requests.exceptions.Timeout:
+            if attempt < 2:
+                time.sleep(2)
+                continue
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(1)
+                continue
+    
+    return None
+
 # Helper to convert hex to RGB
 def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
@@ -1161,84 +1113,44 @@ def generate_video(story_data, output_dir, voice_id=None):
         culture_short = culture.split(' ', 1)[1] if ' ' in culture else culture
         image_paths = []
         
-        # Check if Hugging Face is available and token exists
-        hf_token = os.getenv("HF_TOKEN")
-        hf_client = None
-        if HF_AVAILABLE and hf_token:
-            try:
-                hf_client = InferenceClient(api_key=hf_token)
-            except:
-                hf_client = None
-        
         for i, scene_text in enumerate(scenes):
             img_path = temp_dir / f"scene_{i}.png"
+            
+            # Create prompt from scene text for AI image generation
+            # Extract key visual elements from the scene
+            scene_keywords = scene_text[:100].replace('\n', ' ')
             
             # Generate unique seed for each scene
             import time
             scene_seed = int(time.time() * 1000) + i
             
-            # Create scene-specific prompt using actual scene content
-            scene_keywords = scene_text[:80].replace('\n', ' ').strip()
+            # Create visual prompt for the scene
+            visual_prompt = f"Cinematic illustration of: {scene_keywords}. {culture_short} cultural style, beautiful scenery, dramatic lighting, fantasy art, painterly style, no text, 4k quality"
+            encoded_prompt = urllib.parse.quote(visual_prompt)
             
-            # Detailed prompt for scene
-            scene_prompt = f"Vibrant {culture_short} folktale scene: {scene_keywords}, " \
-                          f"traditional art style, warm lighting, mystical atmosphere, fantasy illustration"
-            
+            # Fetch AI-generated image from Pollinations.ai with retry
             img_loaded = False
-            
-            # Try Hugging Face FLUX.1-schnell first (best quality)
-            if hf_client:
+            for attempt in range(3):  # Try up to 3 times
                 try:
-                    image = hf_client.text_to_image(
-                        scene_prompt,
-                        model="black-forest-labs/FLUX.1-schnell"
-                    )
-                    # Resize and save
-                    image = image.convert('RGB').resize((1280, 720), Image.Resampling.LANCZOS)
-                    image.save(str(img_path), quality=95)
-                    image_paths.append(str(img_path))
-                    img_loaded = True
-                except:
-                    pass
-            
-            # Fallback: Pollinations.ai with scene-specific prompts
-            if not img_loaded:
-                prompts_to_try = [
-                    scene_prompt,
-                    f"{culture_short} folk tale scene, {scene_keywords[:40]}, fantasy art",
-                    f"{culture_short} mythology illustration, beautiful, mystical"
-                ]
-                for prompt in prompts_to_try:
-                    try:
-                        encoded_prompt = urllib.parse.quote(prompt)
-                        img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=512&height=512&nologo=true&seed={scene_seed}"
-                        response = requests.get(img_url, timeout=25)
-                        if response.status_code == 200 and len(response.content) > 5000:
-                            ai_img = Image.open(BytesIO(response.content)).convert('RGB')
-                            ai_img = ai_img.resize((1280, 720), Image.Resampling.LANCZOS)
-                            ai_img.save(str(img_path), quality=95)
-                        image_paths.append(str(img_path))
-                        img_loaded = True
-                        break
-                except:
-                    continue
-            
-            # Fallback 1: Try Picsum.photos (reliable, beautiful random photos)
-            if not img_loaded:
-                try:
-                    # Picsum provides random high-quality photos
-                    picsum_url = f"https://picsum.photos/1280/720?random={scene_seed}"
-                    response = requests.get(picsum_url, allow_redirects=True)
-                    if response.status_code == 200 and len(response.content) > 5000:
+                    img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&nologo=true&seed={scene_seed + attempt}"
+                    response = requests.get(img_url, timeout=60)  # Increased timeout
+                    
+                    if response.status_code == 200 and len(response.content) > 1000:  # Check content size
+                        # Load AI image - NO TEXT OVERLAY (captions will be separate)
                         ai_img = Image.open(BytesIO(response.content)).convert('RGB')
                         ai_img = ai_img.resize((1280, 720), Image.Resampling.LANCZOS)
+                        
+                        # Save clean image without text
                         ai_img.save(str(img_path), quality=95)
                         image_paths.append(str(img_path))
                         img_loaded = True
-                except:
-                    pass
+                        break
+                except Exception as e:
+                    if attempt < 2:  # Retry
+                        time.sleep(1)
+                        continue
             
-            # Fallback 2: Create gradient background if all image APIs failed
+            # Fallback: create beautiful gradient background if AI image failed
             if not img_loaded:
                 # Create gradient background based on culture
                 gradient_colors = {
@@ -1437,7 +1349,7 @@ if 'show_captions' not in st.session_state:
 
 # Main generate button
 if st.sidebar.button("🎬 Generate Story", type="primary", use_container_width=True):
-    with st.spinner("✨ Weaving an enchanting story for you..."):
+    with st.spinner("✨ Weaving your cultural tale..."):
         # Always generate story in English first
         story_text, error = generate_story(culture, story_type, tone, "English", custom_prompt)
         
@@ -1504,12 +1416,18 @@ if st.sidebar.button("🎬 Generate Story", type="primary", use_container_width=
             st.session_state['audio_path'] = None
             st.session_state['video_path'] = None
             st.session_state['translated_story'] = None
-            st.session_state['bg_image_data'] = None
             
-            # Set flag to load image on next render (after story is displayed)
-            st.session_state['needs_image_load'] = True
+            # Auto-generate background image with unique seed
             import time
-            st.session_state['image_seed'] = int(time.time() * 1000)
+            unique_seed = int(time.time() * 1000)
+            culture_short = culture.split(' ', 1)[1] if ' ' in culture else culture
+            random_style = random.choice(["watercolor", "oil painting", "digital art", "fantasy art", "illustration", "concept art"])
+            img_prompt = f"Beautiful {random_style} for story '{parsed_story['title']}', {culture_short} cultural theme, mystical atmosphere, cinematic lighting, 4k quality, no text, unique composition"
+            
+            # Store prompt and seed for later fetching (not the URL)
+            st.session_state['bg_image_prompt'] = img_prompt
+            st.session_state['bg_image_seed'] = unique_seed
+            st.session_state['bg_image_data'] = None  # Will be fetched on display
 
 # Display story if available, otherwise show welcome page
 if st.session_state.get('story_data'):
@@ -1517,24 +1435,39 @@ if st.session_state.get('story_data'):
     current_culture = st.session_state.get('culture', culture)
     current_type = st.session_state.get('story_type', story_type)
     current_tone = st.session_state.get('tone', tone)
-    bg_image_data = st.session_state.get('bg_image_data', None)
+    bg_image_url = st.session_state.get('bg_image_url', '')  # Legacy - kept for compatibility
     
     # Title with custom styling
     st.markdown(f'<h2 class="story-title">📜 {data["title"]}</h2>', unsafe_allow_html=True)
     st.markdown(f'<p class="story-meta">{current_culture} • {current_type} • {current_tone}</p>', unsafe_allow_html=True)
     
-    # Image section - BEFORE story text, AFTER title
-    if bg_image_data:
-        # Image is ready - display it
-        try:
-            st.image(bg_image_data, caption="✨ AI-Generated Story Illustration", use_container_width=True)
-        except:
-            pass
-    elif st.session_state.get('needs_image_load'):
-        # Show a loading message (not blocking spinner)
-        st.info("🎨 AI illustration is being generated... It will appear here when ready.")
+    # Display AI-generated background image
+    bg_prompt = st.session_state.get('bg_image_prompt', '')
+    bg_seed = st.session_state.get('bg_image_seed', 0)
     
-    # Story content - ALWAYS shown immediately
+    if bg_prompt:
+        # Check if we already have the image data cached
+        if st.session_state.get('bg_image_data') is None:
+            with st.spinner('✨ Generating AI illustration...'):
+                img = fetch_story_illustration(bg_prompt, bg_seed)
+                if img:
+                    # Convert to bytes for storage and display
+                    img_buffer = BytesIO()
+                    img.save(img_buffer, format='PNG', quality=95)
+                    st.session_state['bg_image_data'] = img_buffer.getvalue()
+        
+        # Display the cached image
+        if st.session_state.get('bg_image_data'):
+            st.image(
+                st.session_state['bg_image_data'],
+                caption='✨ AI-Generated Story Illustration',
+                width='stretch'  # Full width
+            )
+        else:
+            # Fallback: show a placeholder message
+            st.info('🎨 AI illustration is being generated... Refresh if not visible.')
+    
+    # Story content
     st.markdown(f"""
     <div class="story-box">
         {data['story'].replace(chr(10), '<br>')}
@@ -1604,72 +1537,63 @@ if st.session_state.get('story_data'):
     selected_voice = NARRATION_VOICES[selected_voice_name]
     
     # Media generation buttons - 2 columns (Audio & Video only)
-    # Only show buttons if NOT currently processing
-    is_processing = st.session_state.get('is_processing', False)
+    col1, col2 = st.columns(2)
     
-    if not is_processing:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            audio_btn = st.button("🔊 Generate Audio", use_container_width=True, key="audio_btn")
-        
-        with col2:
-            video_btn = st.button("🎥 Generate Video", use_container_width=True, key="video_btn")
-        
-        # Handle audio generation
-        if audio_btn:
-            st.session_state['is_processing'] = True
-            with st.spinner("🎵 Creating audio narration..."):
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
-                    audio_path, error = generate_audio(data['story'], fp.name, voice_id=selected_voice)
-                    if error:
-                        st.error(f"Audio error: {error}")
-                    else:
-                        st.session_state['audio_path'] = audio_path
-            st.session_state['is_processing'] = False
-            st.rerun()
-        
-        # Handle video generation
-        if video_btn:
-            st.session_state['is_processing'] = True
-            with st.spinner("🎬 Creating story video... This takes 2-3 minutes. Please wait."):
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    video_path, srt_path, error = generate_video(data, temp_dir, voice_id=selected_voice)
-                    if error:
-                        st.error(f"Video error: {error}")
-                    else:
-                        # Copy to persistent location
-                        output_dir = Path("outputs")
-                        output_dir.mkdir(exist_ok=True)
-                        import shutil
+    with col1:
+        audio_btn = st.button("🔊 Generate Audio", use_container_width=True, key="audio_btn")
+    
+    with col2:
+        video_btn = st.button("🎥 Generate Video", use_container_width=True, key="video_btn")
+    
+    # Handle audio generation
+    if audio_btn:
+        with st.spinner("🎵 Creating audio narration..."):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
+                audio_path, error = generate_audio(data['story'], fp.name, voice_id=selected_voice)
+                if error:
+                    st.error(f"Audio error: {error}")
+                else:
+                    st.session_state['audio_path'] = audio_path
+                    st.rerun()
+    
+    # Handle video generation
+    if video_btn:
+        with st.spinner("🎬 Creating story video... This may take a minute."):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                video_path, srt_path, error = generate_video(data, temp_dir, voice_id=selected_voice)
+                if error:
+                    st.error(f"Video error: {error}")
+                else:
+                    # Copy to persistent location
+                    output_dir = Path("outputs")
+                    output_dir.mkdir(exist_ok=True)
+                    import shutil
+                    
+                    # Save video
+                    final_video = output_dir / "story_video.mp4"
+                    shutil.copy(video_path, str(final_video))
+                    st.session_state['video_path'] = str(final_video)
+                    
+                    # Mark that we have a new video (to reset playback position)
+                    st.session_state['new_video_generated'] = True
+                    
+                    # Convert SRT to VTT and store content for HTML5 video subtitles
+                    if srt_path and os.path.exists(srt_path):
+                        final_srt = output_dir / "captions.srt"
+                        shutil.copy(srt_path, str(final_srt))
+                        st.session_state['srt_path'] = str(final_srt)
                         
-                        # Save video
-                        final_video = output_dir / "story_video.mp4"
-                        shutil.copy(video_path, str(final_video))
-                        st.session_state['video_path'] = str(final_video)
+                        # Convert SRT to VTT format for HTML5 video
+                        with open(srt_path, 'r', encoding='utf-8') as f:
+                            srt_content = f.read()
                         
-                        # Mark that we have a new video (to reset playback position)
-                        st.session_state['new_video_generated'] = True
-                        
-                        # Convert SRT to VTT and store content for HTML5 video subtitles
-                        if srt_path and os.path.exists(srt_path):
-                            final_srt = output_dir / "captions.srt"
-                            shutil.copy(srt_path, str(final_srt))
-                            st.session_state['srt_path'] = str(final_srt)
-                            
-                            # Convert SRT to VTT format for HTML5 video
-                            with open(srt_path, 'r', encoding='utf-8') as f:
-                                srt_content = f.read()
-                            
-                            # Convert SRT to VTT
-                            vtt_content = "WEBVTT\n\n"
-                            # Replace comma with period in timestamps (SRT uses comma, VTT uses period)
-                            vtt_content += srt_content.replace(',', '.')
-                            st.session_state['vtt_content'] = vtt_content
-            st.session_state['is_processing'] = False
-            st.rerun()
-    else:
-        st.info("⏳ Processing... Please wait.")
+                        # Convert SRT to VTT
+                        vtt_content = "WEBVTT\n\n"
+                        # Replace comma with period in timestamps (SRT uses comma, VTT uses period)
+                        vtt_content += srt_content.replace(',', '.')
+                        st.session_state['vtt_content'] = vtt_content
+                    
+                    st.rerun()
     
     # Display audio player
     if st.session_state.get('audio_path') and os.path.exists(st.session_state['audio_path']):
@@ -2055,23 +1979,3 @@ st.markdown("""
     <small>Powered by GROQ AI (Llama 3.3) • Built for Learning</small>
 </div>
 """, unsafe_allow_html=True)
-
-# ============== BACKGROUND IMAGE LOADING ==============
-# This runs AFTER all content is displayed, so everything shows immediately
-if st.session_state.get('needs_image_load') and st.session_state.get('story_data'):
-    story_data = st.session_state.get('story_data')
-    current_culture = st.session_state.get('culture', '🇮🇳 Indian')
-    
-    # Use the new generate_story_image function for culturally relevant images
-    story_title = story_data.get('title', 'Story')
-    story_text = story_data.get('story', '')[:150]  # First 150 chars for context
-    
-    image_data = generate_story_image(story_title, current_culture, story_text)
-    
-    if image_data:
-        st.session_state['bg_image_data'] = image_data
-        st.session_state['needs_image_load'] = False
-        st.rerun()
-    else:
-        # Mark as done even if failed to avoid infinite loop
-        st.session_state['needs_image_load'] = False
