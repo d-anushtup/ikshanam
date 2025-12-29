@@ -1446,13 +1446,117 @@ if st.session_state.get('story_data'):
     current_culture = st.session_state.get('culture', culture)
     current_type = st.session_state.get('story_type', story_type)
     current_tone = st.session_state.get('tone', tone)
-    bg_image_url = st.session_state.get('bg_image_url', '')  # Legacy - kept for compatibility
     
     # Title with custom styling
     st.markdown(f'<h2 class="story-title">📜 {data["title"]}</h2>', unsafe_allow_html=True)
     st.markdown(f'<p class="story-meta">{current_culture} • {current_type} • {current_tone}</p>', unsafe_allow_html=True)
     
-    # Story content FIRST (non-blocking)
+    # AI-Generated Image using Puter.js (automatic, before story)
+    # Create the prompt for image generation
+    culture_short = current_culture.split(' ', 1)[1] if ' ' in current_culture else current_culture
+    tone_desc = current_tone.replace(' & ', ' and ').lower()
+    story_title_clean = data["title"].replace('"', '\\"').replace("'", "\\'")[:100]
+    
+    # Build the image prompt
+    img_prompt = f"Beautiful cinematic illustration for '{story_title_clean}', {culture_short} cultural folklore art style, {tone_desc} mood, mystical atmosphere, dramatic lighting, detailed fantasy art, no text"
+    
+    # Escape for JavaScript
+    img_prompt_escaped = img_prompt.replace('\\', '\\\\').replace('"', '\\"').replace("'", "\\'").replace('\n', ' ')
+    
+    # Generate unique ID for this story to prevent image regeneration on same story
+    story_hash = hash(data["title"] + data["story"][:100]) % 10000000
+    
+    # Puter.js automatic image generation component
+    puter_image_html = f'''
+    <script src="https://js.puter.com/v2/"></script>
+    <div id="ai-image-container-{story_hash}" style="margin: 1rem 0; text-align: center; min-height: 400px;">
+        <div id="ai-image-loading-{story_hash}" style="padding: 2rem; color: #90EE90;">
+            <div style="font-size: 2rem; margin-bottom: 1rem;">🎨</div>
+            <div style="font-size: 1rem;">Generating AI illustration...</div>
+            <div style="font-size: 0.8rem; color: #888; margin-top: 0.5rem;">Powered by DALL-E 3</div>
+        </div>
+        <img id="ai-image-result-{story_hash}" style="display: none; max-width: 100%; border-radius: 15px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);" alt="AI-Generated Story Illustration">
+        <p id="ai-image-caption-{story_hash}" style="display: none; text-align: center; color: #888; font-size: 0.9rem; margin-top: 0.5rem;">✨ AI-Generated Story Illustration</p>
+        <div id="ai-image-error-{story_hash}" style="display: none; color: #ff6b6b; padding: 1rem;"></div>
+    </div>
+    <script>
+    (function() {{
+        const storyHash = "{story_hash}";
+        const cacheKey = "puter_img_" + storyHash;
+        const container = document.getElementById("ai-image-container-" + storyHash);
+        const loading = document.getElementById("ai-image-loading-" + storyHash);
+        const imgEl = document.getElementById("ai-image-result-" + storyHash);
+        const caption = document.getElementById("ai-image-caption-" + storyHash);
+        const errorEl = document.getElementById("ai-image-error-" + storyHash);
+        
+        // Check if image is cached in sessionStorage
+        const cachedImg = sessionStorage.getItem(cacheKey);
+        if (cachedImg) {{
+            imgEl.src = cachedImg;
+            imgEl.style.display = "block";
+            caption.style.display = "block";
+            loading.style.display = "none";
+            return;
+        }}
+        
+        // Generate new image using Puter.js
+        async function generateImage() {{
+            try {{
+                const prompt = "{img_prompt_escaped}";
+                
+                // Try different models in order of preference
+                const models = ["dall-e-3", "flux", "stable-diffusion-3"];
+                let imageBlob = null;
+                
+                for (const model of models) {{
+                    try {{
+                        imageBlob = await puter.ai.txt2img(prompt, {{ model: model }});
+                        if (imageBlob) break;
+                    }} catch (e) {{
+                        console.log("Model " + model + " failed, trying next...");
+                        continue;
+                    }}
+                }}
+                
+                if (imageBlob) {{
+                    // Convert blob to data URL for display
+                    const reader = new FileReader();
+                    reader.onload = function(e) {{
+                        const dataUrl = e.target.result;
+                        imgEl.src = dataUrl;
+                        imgEl.style.display = "block";
+                        caption.style.display = "block";
+                        loading.style.display = "none";
+                        
+                        // Cache in sessionStorage
+                        try {{
+                            sessionStorage.setItem(cacheKey, dataUrl);
+                        }} catch (e) {{
+                            console.log("Could not cache image");
+                        }}
+                    }};
+                    reader.readAsDataURL(imageBlob);
+                }} else {{
+                    throw new Error("All models failed");
+                }}
+            }} catch (error) {{
+                console.error("Image generation error:", error);
+                loading.style.display = "none";
+                errorEl.innerHTML = "⚠️ Could not generate image. <a href='#' onclick='location.reload()' style='color: #90EE90;'>Refresh to retry</a>";
+                errorEl.style.display = "block";
+            }}
+        }}
+        
+        // Start generation after a brief delay to ensure Puter.js is loaded
+        setTimeout(generateImage, 500);
+    }})();
+    </script>
+    '''
+    
+    # Display the Puter.js image component
+    st.components.v1.html(puter_image_html, height=480, scrolling=False)
+    
+    # Story content (after image)
     st.markdown(f"""
     <div class="story-box">
         {data['story'].replace(chr(10), '<br>')}
@@ -1503,41 +1607,6 @@ if st.session_state.get('story_data'):
             <strong>✨ {moral_label}:</strong> {data['moral']}
         </div>
         """, unsafe_allow_html=True)
-    
-    # AI Illustration Section (non-blocking - user clicks to generate)
-    st.markdown('<h3 class="media-header">🎨 AI Story Illustration</h3>', unsafe_allow_html=True)
-    
-    # Check if we already have image cached
-    if st.session_state.get('bg_image_data'):
-        st.image(
-            st.session_state['bg_image_data'],
-            caption='✨ AI-Generated Story Illustration',
-            use_container_width=True
-        )
-        if st.button("🔄 Regenerate Illustration", key="regen_img_btn"):
-            st.session_state['bg_image_data'] = None
-            st.rerun()
-    else:
-        # Button to generate image (non-blocking)
-        if st.button("🎨 Generate AI Illustration", key="gen_img_btn", type="secondary"):
-            bg_prompt = st.session_state.get('bg_image_prompt', '')
-            bg_seed = st.session_state.get('bg_image_seed', 0)
-            
-            if bg_prompt:
-                with st.spinner('✨ Generating AI illustration (this may take 30-60 seconds)...'):
-                    try:
-                        img = fetch_story_illustration(bg_prompt, bg_seed)
-                        if img:
-                            img_buffer = BytesIO()
-                            img.save(img_buffer, format='PNG', quality=95)
-                            st.session_state['bg_image_data'] = img_buffer.getvalue()
-                            st.rerun()
-                        else:
-                            st.warning('⚠️ Could not generate image. Pollinations.ai may be busy. Try again!')
-                    except Exception as e:
-                        st.error(f'❌ Image generation failed: {str(e)}')
-            else:
-                st.info('Generate a story first to create an illustration.')
     
     st.divider()
     
