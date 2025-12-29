@@ -1093,23 +1093,31 @@ def generate_video(story_data, output_dir, voice_id=None):
             visual_prompt = f"Cinematic illustration of: {scene_keywords}. {culture_short} cultural style, beautiful scenery, dramatic lighting, fantasy art, painterly style, no text, 4k quality"
             encoded_prompt = urllib.parse.quote(visual_prompt)
             
-            # Fetch AI-generated image from Pollinations.ai with retry
+            # Fetch AI-generated image from Pollinations.ai with retry and longer timeout
             img_loaded = False
             for attempt in range(3):  # Try up to 3 times
                 try:
                     img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&nologo=true&seed={scene_seed + attempt}"
-                    response = requests.get(img_url, timeout=60)  # Increased timeout
+                    # Use streaming and longer timeout - Pollinations generates images on-the-fly
+                    response = requests.get(img_url, timeout=120, stream=True)
                     
-                    if response.status_code == 200 and len(response.content) > 1000:  # Check content size
-                        # Load AI image - NO TEXT OVERLAY (captions will be separate)
-                        ai_img = Image.open(BytesIO(response.content)).convert('RGB')
-                        ai_img = ai_img.resize((1280, 720), Image.Resampling.LANCZOS)
-                        
-                        # Save clean image without text
-                        ai_img.save(str(img_path), quality=95)
-                        image_paths.append(str(img_path))
-                        img_loaded = True
-                        break
+                    if response.status_code == 200:
+                        # Read content
+                        content = response.content
+                        if len(content) > 5000:  # Valid image should be > 5KB
+                            # Load AI image - NO TEXT OVERLAY (captions will be separate)
+                            ai_img = Image.open(BytesIO(content)).convert('RGB')
+                            ai_img = ai_img.resize((1280, 720), Image.Resampling.LANCZOS)
+                            
+                            # Save clean image without text
+                            ai_img.save(str(img_path), quality=95)
+                            image_paths.append(str(img_path))
+                            img_loaded = True
+                            break
+                except requests.exceptions.Timeout:
+                    if attempt < 2:  # Retry with longer wait
+                        time.sleep(2)
+                        continue
                 except Exception as e:
                     if attempt < 2:  # Retry
                         time.sleep(1)
@@ -1382,14 +1390,24 @@ if st.sidebar.button("🎬 Generate Story", type="primary", use_container_width=
             st.session_state['video_path'] = None
             st.session_state['translated_story'] = None
             
-            # Auto-generate background image with unique seed
+            # Auto-generate background image with unique seed - DOWNLOAD immediately
             import time
             unique_seed = int(time.time() * 1000)
             culture_short = culture.split(' ', 1)[1] if ' ' in culture else culture
             random_style = random.choice(["watercolor", "oil painting", "digital art", "fantasy art", "illustration", "concept art"])
             img_prompt = f"Beautiful {random_style} for story '{parsed_story['title']}', {culture_short} cultural theme, mystical atmosphere, cinematic lighting, 4k quality, no text, unique composition"
             encoded_prompt = urllib.parse.quote(img_prompt)
-            st.session_state['bg_image_url'] = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=600&nologo=true&seed={unique_seed}"
+            img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=600&nologo=true&seed={unique_seed}"
+            
+            # Download image and store as bytes (Streamlit blocks external img tags)
+            st.session_state['bg_image_data'] = None
+            try:
+                with st.spinner("🎨 Generating AI illustration..."):
+                    img_response = requests.get(img_url, timeout=120)
+                    if img_response.status_code == 200 and len(img_response.content) > 5000:
+                        st.session_state['bg_image_data'] = img_response.content
+            except Exception as img_err:
+                pass  # Silently fail - image is optional
 
 # Display story if available, otherwise show welcome page
 if st.session_state.get('story_data'):
@@ -1397,20 +1415,18 @@ if st.session_state.get('story_data'):
     current_culture = st.session_state.get('culture', culture)
     current_type = st.session_state.get('story_type', story_type)
     current_tone = st.session_state.get('tone', tone)
-    bg_image_url = st.session_state.get('bg_image_url', '')
+    bg_image_data = st.session_state.get('bg_image_data', None)
     
     # Title with custom styling
     st.markdown(f'<h2 class="story-title">📜 {data["title"]}</h2>', unsafe_allow_html=True)
     st.markdown(f'<p class="story-meta">{current_culture} • {current_type} • {current_tone}</p>', unsafe_allow_html=True)
     
-    # Display background image if available
-    if bg_image_url:
-        st.markdown(f'''
-        <div style="margin: 1rem 0; border-radius: 15px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
-            <img src="{bg_image_url}" style="width: 100%; height: auto; display: block;" alt="AI-Generated Story Illustration">
-        </div>
-        <p style="text-align: center; color: #888; font-size: 0.9rem; margin-top: -0.5rem;">✨ AI-Generated Story Illustration</p>
-        ''', unsafe_allow_html=True)
+    # Display AI-generated background image if available
+    if bg_image_data:
+        try:
+            st.image(bg_image_data, caption="✨ AI-Generated Story Illustration", use_container_width=True)
+        except Exception as img_display_err:
+            pass  # Silently fail if image can't be displayed
     
     # Story content
     st.markdown(f"""
@@ -1503,7 +1519,7 @@ if st.session_state.get('story_data'):
     
     # Handle video generation
     if video_btn:
-        with st.spinner("🎬 Creating story video... This may take a minute."):
+        with st.spinner("🎬 Creating story video with AI illustrations... This takes 2-3 minutes. Please wait."):
             with tempfile.TemporaryDirectory() as temp_dir:
                 video_path, srt_path, error = generate_video(data, temp_dir, voice_id=selected_voice)
                 if error:
