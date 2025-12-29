@@ -77,15 +77,22 @@ except ImportError:
     IMAGEIO_AVAILABLE = False
 
 # ============== HUGGING FACE IMAGE GENERATION ==============
+# Import huggingface_hub for InferenceClient
+try:
+    from huggingface_hub import InferenceClient
+    HF_AVAILABLE = True
+except ImportError:
+    HF_AVAILABLE = False
+
 def generate_story_image(title, culture, story_summary=""):
     """
-    Generate a culturally relevant image for the story using Hugging Face Inference API.
-    Falls back to Pollinations.ai and Picsum if HF fails.
+    Generate a culturally relevant image for the story using Hugging Face FLUX.1-schnell.
+    Creates prompts based on story title and culture for relevant images.
     
     Args:
         title: Story title
         culture: Culture (e.g., "🇮🇳 Indian")
-        story_summary: First 100 chars of story for context
+        story_summary: First part of story for context
     
     Returns:
         Image bytes or None
@@ -95,54 +102,54 @@ def generate_story_image(title, culture, story_summary=""):
     # Extract culture name
     culture_name = culture.split(' ', 1)[1] if ' ' in culture else culture
     
-    # Create a detailed, culturally relevant prompt
-    prompt = f"Beautiful digital art illustration for a {culture_name} folk tale titled '{title}'. " \
-             f"{culture_name} cultural elements, traditional artistic style, vibrant colors, " \
-             f"mystical atmosphere, fantasy art, highly detailed, 4k quality"
+    # Clean the title for prompt
+    clean_title = title.replace('"', '').replace("'", "")[:50]
     
-    # Hugging Face Inference API (free, no API key needed for public models)
-    HF_MODELS = [
-        "black-forest-labs/FLUX.1-schnell",  # Fast FLUX model
-        "stabilityai/stable-diffusion-xl-base-1.0",  # SDXL
+    # Create detailed, culturally relevant prompt
+    prompt = f"Vibrant {culture_name} folktale scene: {clean_title}, traditional art style, " \
+             f"warm lighting, mystical atmosphere, fantasy illustration, detailed, beautiful colors"
+    
+    # Try Hugging Face FLUX.1-schnell first
+    if HF_AVAILABLE:
+        hf_token = os.getenv("HF_TOKEN")
+        if hf_token:
+            try:
+                client = InferenceClient(api_key=hf_token)
+                image = client.text_to_image(
+                    prompt,
+                    model="black-forest-labs/FLUX.1-schnell"
+                )
+                # Convert PIL Image to bytes
+                img_bytes = BytesIO()
+                image.save(img_bytes, format='PNG')
+                return img_bytes.getvalue()
+            except Exception as e:
+                pass  # Fall through to alternatives
+    
+    # Fallback: Pollinations.ai with story-specific prompts
+    prompts = [
+        f"{culture_name} folk tale '{clean_title}', digital art, vibrant colors, mystical atmosphere",
+        f"{culture_name} mythology illustration, {clean_title}, traditional art style",
+        f"Beautiful {culture_name} cultural art, fantasy scene, mystical"
     ]
     
-    for model in HF_MODELS:
+    for p in prompts:
         try:
-            api_url = f"https://api-inference.huggingface.co/models/{model}"
-            headers = {"Content-Type": "application/json"}
-            payload = {"inputs": prompt}
-            
-            response = requests.post(api_url, headers=headers, json=payload, timeout=30)
-            
+            encoded = urllib.parse.quote(p)
+            seed = int(time.time() * 1000) % 100000
+            url = f"https://image.pollinations.ai/prompt/{encoded}?width=600&height=400&nologo=true&seed={seed}"
+            response = requests.get(url, timeout=25)
             if response.status_code == 200 and len(response.content) > 5000:
-                # Verify it's actually an image
                 try:
                     img = Image.open(BytesIO(response.content))
                     img.verify()
                     return response.content
                 except:
                     continue
-            elif response.status_code == 503:
-                # Model loading, wait and retry
-                time.sleep(5)
-                response = requests.post(api_url, headers=headers, json=payload, timeout=45)
-                if response.status_code == 200 and len(response.content) > 5000:
-                    return response.content
         except:
             continue
     
-    # Fallback 1: Pollinations.ai with cultural prompt
-    try:
-        simple_prompt = f"{culture_name} folklore art beautiful mystical"
-        encoded = urllib.parse.quote(simple_prompt)
-        url = f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&nologo=true&seed={int(time.time())}"
-        response = requests.get(url, timeout=25)
-        if response.status_code == 200 and len(response.content) > 5000:
-            return response.content
-    except:
-        pass
-    
-    # Fallback 2: Picsum (random beautiful photos)
+    # Final fallback: Picsum
     try:
         picsum_url = f"https://picsum.photos/600/400?random={int(time.time())}"
         response = requests.get(picsum_url, allow_redirects=True, timeout=10)
@@ -1154,6 +1161,15 @@ def generate_video(story_data, output_dir, voice_id=None):
         culture_short = culture.split(' ', 1)[1] if ' ' in culture else culture
         image_paths = []
         
+        # Check if Hugging Face is available and token exists
+        hf_token = os.getenv("HF_TOKEN")
+        hf_client = None
+        if HF_AVAILABLE and hf_token:
+            try:
+                hf_client = InferenceClient(api_key=hf_token)
+            except:
+                hf_client = None
+        
         for i, scene_text in enumerate(scenes):
             img_path = temp_dir / f"scene_{i}.png"
             
@@ -1165,48 +1181,47 @@ def generate_video(story_data, output_dir, voice_id=None):
             scene_keywords = scene_text[:80].replace('\n', ' ').strip()
             
             # Detailed prompt for scene
-            scene_prompt = f"Digital art illustration for {culture_short} folk tale: {scene_keywords}. " \
-                          f"{culture_short} cultural style, traditional art elements, vibrant colors, fantasy art"
+            scene_prompt = f"Vibrant {culture_short} folktale scene: {scene_keywords}, " \
+                          f"traditional art style, warm lighting, mystical atmosphere, fantasy illustration"
             
-            # Try Hugging Face first for best quality
             img_loaded = False
-            try:
-                api_url = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
-                headers = {"Content-Type": "application/json"}
-                payload = {"inputs": scene_prompt}
-                
-                response = requests.post(api_url, headers=headers, json=payload, timeout=30)
-                
-                if response.status_code == 200 and len(response.content) > 5000:
-                    ai_img = Image.open(BytesIO(response.content)).convert('RGB')
-                    ai_img = ai_img.resize((1280, 720), Image.Resampling.LANCZOS)
-                    ai_img.save(str(img_path), quality=95)
+            
+            # Try Hugging Face FLUX.1-schnell first (best quality)
+            if hf_client:
+                try:
+                    image = hf_client.text_to_image(
+                        scene_prompt,
+                        model="black-forest-labs/FLUX.1-schnell"
+                    )
+                    # Resize and save
+                    image = image.convert('RGB').resize((1280, 720), Image.Resampling.LANCZOS)
+                    image.save(str(img_path), quality=95)
                     image_paths.append(str(img_path))
                     img_loaded = True
-            except:
-                pass
+                except:
+                    pass
             
-            # Fallback: Pollinations.ai
+            # Fallback: Pollinations.ai with scene-specific prompts
             if not img_loaded:
-                simple_prompts = [
-                    f"{culture_short} folklore scene, beautiful, mystical, fantasy art",
-                    f"{culture_short} traditional art, peaceful scene",
-                    f"fantasy landscape, mystical, beautiful"
+                prompts_to_try = [
+                    scene_prompt,
+                    f"{culture_short} folk tale scene, {scene_keywords[:40]}, fantasy art",
+                    f"{culture_short} mythology illustration, beautiful, mystical"
                 ]
-                for prompt in simple_prompts:
+                for prompt in prompts_to_try:
                     try:
                         encoded_prompt = urllib.parse.quote(prompt)
                         img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=512&height=512&nologo=true&seed={scene_seed}"
-                        response = requests.get(img_url, timeout=20)
+                        response = requests.get(img_url, timeout=25)
                         if response.status_code == 200 and len(response.content) > 5000:
                             ai_img = Image.open(BytesIO(response.content)).convert('RGB')
                             ai_img = ai_img.resize((1280, 720), Image.Resampling.LANCZOS)
                             ai_img.save(str(img_path), quality=95)
-                            image_paths.append(str(img_path))
-                            img_loaded = True
-                            break
-                    except:
-                        continue
+                        image_paths.append(str(img_path))
+                        img_loaded = True
+                        break
+                except:
+                    continue
             
             # Fallback 1: Try Picsum.photos (reliable, beautiful random photos)
             if not img_loaded:
