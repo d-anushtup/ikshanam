@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Cultural Storyteller | AI-Powered Tales</title>
+    <meta name="description" content="Experience folk tales, history, and traditions through AI-generated storytelling with audio narration and video">
+    <link rel="stylesheet" href="/static/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <span class="logo-icon">🌍</span>
+                <h1>Cultural Storyteller</h1>
+            </div>
+            <p class="tagline">AI-Powered Tales from Around the World</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Input Section -->
+            <section class="input-section glass-card">
+                <h2>✨ Create Your Story</h2>
+                
+                <div class="form-group">
+                    <label for="culture-select">Choose a Culture</label>
+                    <select id="culture-select" class="culture-dropdown">
+                        <option value="indian">🇮🇳 Indian</option>
+                        <option value="japanese">🇯🇵 Japanese</option>
+                        <option value="african">🌍 African</option>
+                        <option value="celtic">☘️ Celtic</option>
+                        <option value="chinese">🇨🇳 Chinese</option>
+                        <option value="greek">🏛️ Greek</option>
+                        <option value="arabian">🏜️ Arabian</option>
+                        <option value="native_american">🦅 Native American</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="story-prompt">Your Story Idea</label>
+                    <textarea 
+                        id="story-prompt" 
+                        placeholder="Describe your story idea... e.g., 'A tale about a wise elephant who helps a lost child find their way home' or 'The legend of a magical lotus flower that grants wisdom'"
+                        rows="4"
+                    ></textarea>
+                </div>
+                
+                <button id="generate-btn" class="btn btn-primary">
+                    <span class="btn-icon">📖</span>
+                    Generate Story
+                </button>
+                
+                <div id="config-warning" class="warning-banner hidden">
+                    ⚠️ <span id="config-message"></span>
+                </div>
+            </section>
+
+            <!-- Loading State -->
+            <div id="loading-section" class="loading-section hidden">
+                <div class="spinner"></div>
+                <p id="loading-text">Weaving your tale...</p>
+            </div>
+
+            <!-- Output Section -->
+            <section id="output-section" class="output-section hidden">
+                <!-- Story Display -->
+                <div class="story-card glass-card">
+                    <div class="story-header">
+                        <h2 id="story-title">Story Title</h2>
+                        <span id="story-culture" class="culture-badge">Indian</span>
+                    </div>
+                    
+                    <div id="story-content" class="story-content">
+                        <!-- Story text will be inserted here -->
+                    </div>
+                    
+                    <div id="story-moral" class="story-moral">
+                        <!-- Moral will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- Media Controls -->
+                <div class="media-section glass-card">
+                    <h3>🎬 Bring Your Story to Life</h3>
+                    
+                    <div class="media-buttons">
+                        <button id="audio-btn" class="btn btn-secondary">
+                            <span class="btn-icon">🔊</span>
+                            Generate Audio
+                        </button>
+                        <button id="video-btn" class="btn btn-secondary">
+                            <span class="btn-icon">🎥</span>
+                            Generate Video
+                        </button>
+                    </div>
+                    
+                    <div id="media-loading" class="media-loading hidden">
+                        <div class="spinner small"></div>
+                        <span id="media-loading-text">Generating...</span>
+                    </div>
+                    
+                    <!-- Audio Player -->
+                    <div id="audio-container" class="media-container hidden">
+                        <h4>🎧 Audio Narration</h4>
+                        <audio id="audio-player" controls>
+                            Your browser does not support the audio element.
+                        </audio>
+                    </div>
+                    
+                    <!-- Video Player -->
+                    <div id="video-container" class="media-container hidden">
+                        <h4>🎥 Story Video</h4>
+                        <video id="video-player" controls>
+                            Your browser does not support the video element.
+                        </video>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Powered by AI • Celebrating World Cultures</p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
