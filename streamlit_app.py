@@ -1081,45 +1081,41 @@ def generate_video(story_data, output_dir, voice_id=None):
         for i, scene_text in enumerate(scenes):
             img_path = temp_dir / f"scene_{i}.png"
             
-            # Create prompt from scene text for AI image generation
-            # Extract key visual elements from the scene
-            scene_keywords = scene_text[:100].replace('\n', ' ')
-            
             # Generate unique seed for each scene
             import time
             scene_seed = int(time.time() * 1000) + i
             
-            # Create visual prompt for the scene
-            visual_prompt = f"Cinematic illustration of: {scene_keywords}. {culture_short} cultural style, beautiful scenery, dramatic lighting, fantasy art, painterly style, no text, 4k quality"
-            encoded_prompt = urllib.parse.quote(visual_prompt)
+            # Simplified prompts that work better with Pollinations.ai
+            simple_prompts = [
+                f"{culture_short} folklore scene, beautiful, mystical, fantasy art",
+                f"{culture_short} traditional art, peaceful nature scene",
+                f"fantasy landscape, mystical, beautiful colors"
+            ]
             
-            # Fetch AI-generated image from Pollinations.ai with retry and longer timeout
+            # Fetch AI-generated image from Pollinations.ai with retry
             img_loaded = False
-            for attempt in range(3):  # Try up to 3 times
+            for attempt, prompt in enumerate(simple_prompts):
                 try:
+                    encoded_prompt = urllib.parse.quote(prompt)
                     img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&nologo=true&seed={scene_seed + attempt}"
-                    # Use streaming and longer timeout - Pollinations generates images on-the-fly
-                    response = requests.get(img_url, timeout=120, stream=True)
                     
-                    if response.status_code == 200:
-                        # Read content
-                        content = response.content
-                        if len(content) > 5000:  # Valid image should be > 5KB
-                            # Load AI image - NO TEXT OVERLAY (captions will be separate)
-                            ai_img = Image.open(BytesIO(content)).convert('RGB')
-                            ai_img = ai_img.resize((1280, 720), Image.Resampling.LANCZOS)
-                            
-                            # Save clean image without text
-                            ai_img.save(str(img_path), quality=95)
-                            image_paths.append(str(img_path))
-                            img_loaded = True
-                            break
-                except requests.exceptions.Timeout:
-                    if attempt < 2:  # Retry with longer wait
+                    response = requests.get(img_url, timeout=90)
+                    
+                    if response.status_code == 200 and len(response.content) > 5000:
+                        # Load AI image
+                        ai_img = Image.open(BytesIO(response.content)).convert('RGB')
+                        ai_img = ai_img.resize((1280, 720), Image.Resampling.LANCZOS)
+                        
+                        # Save clean image without text
+                        ai_img.save(str(img_path), quality=95)
+                        image_paths.append(str(img_path))
+                        img_loaded = True
+                        break
+                    elif response.status_code == 500:
                         time.sleep(2)
                         continue
                 except Exception as e:
-                    if attempt < 2:  # Retry
+                    if attempt < 2:
                         time.sleep(1)
                         continue
             
@@ -1389,25 +1385,15 @@ if st.sidebar.button("🎬 Generate Story", type="primary", use_container_width=
             st.session_state['audio_path'] = None
             st.session_state['video_path'] = None
             st.session_state['translated_story'] = None
+            st.session_state['bg_image_data'] = None  # Will be loaded separately
             
-            # Auto-generate background image with unique seed - DOWNLOAD immediately
+            # Prepare image URL for later loading (don't block story display!)
             import time
             unique_seed = int(time.time() * 1000)
             culture_short = culture.split(' ', 1)[1] if ' ' in culture else culture
-            random_style = random.choice(["watercolor", "oil painting", "digital art", "fantasy art", "illustration", "concept art"])
-            img_prompt = f"Beautiful {random_style} for story '{parsed_story['title']}', {culture_short} cultural theme, mystical atmosphere, cinematic lighting, 4k quality, no text, unique composition"
-            encoded_prompt = urllib.parse.quote(img_prompt)
-            img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=600&nologo=true&seed={unique_seed}"
-            
-            # Download image and store as bytes (Streamlit blocks external img tags)
-            st.session_state['bg_image_data'] = None
-            try:
-                with st.spinner("🎨 Generating AI illustration..."):
-                    img_response = requests.get(img_url, timeout=120)
-                    if img_response.status_code == 200 and len(img_response.content) > 5000:
-                        st.session_state['bg_image_data'] = img_response.content
-            except Exception as img_err:
-                pass  # Silently fail - image is optional
+            prompt = f"{culture_short} folklore art, mystical, beautiful, fantasy"
+            encoded_prompt = urllib.parse.quote(prompt)
+            st.session_state['bg_image_url'] = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=400&nologo=true&seed={unique_seed}"
 
 # Display story if available, otherwise show welcome page
 if st.session_state.get('story_data'):
@@ -1416,6 +1402,7 @@ if st.session_state.get('story_data'):
     current_type = st.session_state.get('story_type', story_type)
     current_tone = st.session_state.get('tone', tone)
     bg_image_data = st.session_state.get('bg_image_data', None)
+    bg_image_url = st.session_state.get('bg_image_url', None)
     
     # Title with custom styling
     st.markdown(f'<h2 class="story-title">📜 {data["title"]}</h2>', unsafe_allow_html=True)
@@ -1426,7 +1413,33 @@ if st.session_state.get('story_data'):
         try:
             st.image(bg_image_data, caption="✨ AI-Generated Story Illustration", use_container_width=True)
         except Exception as img_display_err:
-            pass  # Silently fail if image can't be displayed
+            pass
+    elif bg_image_url:
+        # Show button to load image (doesn't block story display!)
+        if st.button("🎨 Load AI Illustration", key="load_illustration"):
+            with st.spinner("🎨 Generating AI illustration... (may take up to 60 seconds)"):
+                # Try multiple simpler prompts
+                culture_short = current_culture.split(' ', 1)[1] if ' ' in current_culture else current_culture
+                prompts = [
+                    f"{culture_short} art fantasy beautiful",
+                    "beautiful fantasy landscape art",
+                    "mystical nature painting"
+                ]
+                success = False
+                for prompt in prompts:
+                    try:
+                        encoded = urllib.parse.quote(prompt)
+                        url = f"https://image.pollinations.ai/prompt/{encoded}?width=800&height=400&nologo=true"
+                        img_response = requests.get(url, timeout=45)
+                        if img_response.status_code == 200 and len(img_response.content) > 5000:
+                            st.session_state['bg_image_data'] = img_response.content
+                            success = True
+                            st.rerun()
+                            break
+                    except:
+                        continue
+                if not success:
+                    st.warning("⚠️ AI image service is currently unavailable. Please try again later.")
     
     # Story content
     st.markdown(f"""
@@ -1498,63 +1511,72 @@ if st.session_state.get('story_data'):
     selected_voice = NARRATION_VOICES[selected_voice_name]
     
     # Media generation buttons - 2 columns (Audio & Video only)
-    col1, col2 = st.columns(2)
+    # Only show buttons if NOT currently processing
+    is_processing = st.session_state.get('is_processing', False)
     
-    with col1:
-        audio_btn = st.button("🔊 Generate Audio", use_container_width=True, key="audio_btn")
-    
-    with col2:
-        video_btn = st.button("🎥 Generate Video", use_container_width=True, key="video_btn")
-    
-    # Handle audio generation
-    if audio_btn:
-        with st.spinner("🎵 Creating audio narration..."):
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
-                audio_path, error = generate_audio(data['story'], fp.name, voice_id=selected_voice)
-                if error:
-                    st.error(f"Audio error: {error}")
-                else:
-                    st.session_state['audio_path'] = audio_path
-                    st.rerun()
-    
-    # Handle video generation
-    if video_btn:
-        with st.spinner("🎬 Creating story video with AI illustrations... This takes 2-3 minutes. Please wait."):
-            with tempfile.TemporaryDirectory() as temp_dir:
-                video_path, srt_path, error = generate_video(data, temp_dir, voice_id=selected_voice)
-                if error:
-                    st.error(f"Video error: {error}")
-                else:
-                    # Copy to persistent location
-                    output_dir = Path("outputs")
-                    output_dir.mkdir(exist_ok=True)
-                    import shutil
-                    
-                    # Save video
-                    final_video = output_dir / "story_video.mp4"
-                    shutil.copy(video_path, str(final_video))
-                    st.session_state['video_path'] = str(final_video)
-                    
-                    # Mark that we have a new video (to reset playback position)
-                    st.session_state['new_video_generated'] = True
-                    
-                    # Convert SRT to VTT and store content for HTML5 video subtitles
-                    if srt_path and os.path.exists(srt_path):
-                        final_srt = output_dir / "captions.srt"
-                        shutil.copy(srt_path, str(final_srt))
-                        st.session_state['srt_path'] = str(final_srt)
+    if not is_processing:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            audio_btn = st.button("🔊 Generate Audio", use_container_width=True, key="audio_btn")
+        
+        with col2:
+            video_btn = st.button("🎥 Generate Video", use_container_width=True, key="video_btn")
+        
+        # Handle audio generation
+        if audio_btn:
+            st.session_state['is_processing'] = True
+            with st.spinner("🎵 Creating audio narration..."):
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
+                    audio_path, error = generate_audio(data['story'], fp.name, voice_id=selected_voice)
+                    if error:
+                        st.error(f"Audio error: {error}")
+                    else:
+                        st.session_state['audio_path'] = audio_path
+            st.session_state['is_processing'] = False
+            st.rerun()
+        
+        # Handle video generation
+        if video_btn:
+            st.session_state['is_processing'] = True
+            with st.spinner("🎬 Creating story video... This takes 2-3 minutes. Please wait."):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    video_path, srt_path, error = generate_video(data, temp_dir, voice_id=selected_voice)
+                    if error:
+                        st.error(f"Video error: {error}")
+                    else:
+                        # Copy to persistent location
+                        output_dir = Path("outputs")
+                        output_dir.mkdir(exist_ok=True)
+                        import shutil
                         
-                        # Convert SRT to VTT format for HTML5 video
-                        with open(srt_path, 'r', encoding='utf-8') as f:
-                            srt_content = f.read()
+                        # Save video
+                        final_video = output_dir / "story_video.mp4"
+                        shutil.copy(video_path, str(final_video))
+                        st.session_state['video_path'] = str(final_video)
                         
-                        # Convert SRT to VTT
-                        vtt_content = "WEBVTT\n\n"
-                        # Replace comma with period in timestamps (SRT uses comma, VTT uses period)
-                        vtt_content += srt_content.replace(',', '.')
-                        st.session_state['vtt_content'] = vtt_content
-                    
-                    st.rerun()
+                        # Mark that we have a new video (to reset playback position)
+                        st.session_state['new_video_generated'] = True
+                        
+                        # Convert SRT to VTT and store content for HTML5 video subtitles
+                        if srt_path and os.path.exists(srt_path):
+                            final_srt = output_dir / "captions.srt"
+                            shutil.copy(srt_path, str(final_srt))
+                            st.session_state['srt_path'] = str(final_srt)
+                            
+                            # Convert SRT to VTT format for HTML5 video
+                            with open(srt_path, 'r', encoding='utf-8') as f:
+                                srt_content = f.read()
+                            
+                            # Convert SRT to VTT
+                            vtt_content = "WEBVTT\n\n"
+                            # Replace comma with period in timestamps (SRT uses comma, VTT uses period)
+                            vtt_content += srt_content.replace(',', '.')
+                            st.session_state['vtt_content'] = vtt_content
+            st.session_state['is_processing'] = False
+            st.rerun()
+    else:
+        st.info("⏳ Processing... Please wait.")
     
     # Display audio player
     if st.session_state.get('audio_path') and os.path.exists(st.session_state['audio_path']):
