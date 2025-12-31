@@ -16,19 +16,19 @@
 
 ---
 
-## ✨ Features
+## Features
 
-- 🌏 **8+ Cultural Traditions** — Indian, Japanese, African, Celtic, Chinese, Greek, Arabian, Native American & custom cultures
-- 📖 **Multiple Story Types** — Folk Tales, Mythology, Historical Stories, Moral Stories, Legends & more
-- 🎭 **Customizable Tones** — Simple, Dramatic, Child-friendly, Mysterious, Humorous
-- 🗣️ **Multi-Language Support** — Generate stories in 15+ languages including Hindi, Bengali, Tamil, Spanish, French, Japanese, and more
-- 🎙️ **Neural Voice Narration** — High-quality AI voices using Microsoft Edge TTS
-- 🎬 **Video Generation** — Automatically create narrated story videos with cultural themes
-- 📱 **Beautiful UI** — Immersive dark theme with cultural aesthetics
+- **8+ Cultural Traditions** — Indian, Japanese, African, Celtic, Chinese, Greek, Arabian, Native American & custom cultures
+- **Multiple Story Types** — Folk Tales, Mythology, Historical Stories, Moral Stories, Legends & more
+- **Customizable Tones** — Simple, Dramatic, Child-friendly, Mysterious, Humorous
+- **Multi-Language Support** — Generate stories in 15+ languages including Hindi, Bengali, Tamil, Spanish, French, Japanese, and more
+- **Neural Voice Narration** — High-quality AI voices using Microsoft Edge TTS
+- **Video Generation** — Automatically create narrated story videos with cultural themes
+- **Beautiful UI** — Immersive dark theme with cultural aesthetics
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -69,11 +69,11 @@
 
 6. **Open in browser**
    
-   Visit `http://localhost:8501` 🎉
+   Visit `http://localhost:8501` 
 
 ---
 
-## 🎨 Supported Cultures
+## Supported Cultures
 
 | Culture | Theme | Story Elements |
 |---------|-------|----------------|
@@ -88,7 +88,7 @@
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Frontend**: [Streamlit](https://streamlit.io) — Beautiful, interactive web UI
 - **AI Engine**: [Groq](https://groq.com) — Ultra-fast LLM inference (Llama 3.3 70B)
@@ -98,7 +98,7 @@
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 ikshanam/
@@ -114,16 +114,16 @@ ikshanam/
 
 ---
 
-## 🎬 How It Works
+## How It Works
 
 ```mermaid
 graph LR
-    A[👤 User Input] --> B[🌍 Culture + Story Type]
-    B --> C[🤖 Groq AI]
-    C --> D[📖 Generated Story]
-    D --> E[🎙️ Neural Voice TTS]
-    E --> F[🎬 Video Generation]
-    F --> G[✨ Final Video]
+    A[User Input] --> B[Culture + Story Type]
+    B --> C[Groq AI]
+    C --> D[Generated Story]
+    D --> E[Neural Voice TTS]
+    E --> F[Video Generation]
+    F --> G[Final Video]
 ```
 
 1. **Choose** your culture, story type, tone, and language
@@ -140,8 +140,8 @@ graph LR
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GROQ_API_KEY` | ✅ Yes | Your Groq API key for story generation |
-| `GEMINI_API_KEY` | ❌ Optional | Google Gemini key (for Flask app) |
+| `GROQ_API_KEY` | Yes | Your Groq API key for story generation |
+| `GEMINI_API_KEY` | Optional | Google Gemini key (for Flask app) |
 
 ### Customization
 
@@ -151,24 +151,13 @@ graph LR
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to:
-
-- 🐛 Report bugs
-- 💡 Suggest new features
-- 🌍 Add new cultures or languages
-- 📖 Improve documentation
-
----
-
-## 📄 License
+## License
 
 This project is for educational purposes.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Groq](https://groq.com) for lightning-fast AI inference
 - [Streamlit](https://streamlit.io) for the amazing framework
