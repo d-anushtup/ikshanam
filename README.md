@@ -1,4 +1,4 @@
-# 🌍 Ikshanam - Smart Cultural Storyteller
+# Ikshanam - Smart Cultural Storyteller
 
 <div align="center">
 
@@ -18,7 +18,7 @@
 
 ## Features
 
-- **8+ Cultural Traditions** — Indian, Japanese, African, Celtic, Chinese, Greek, Arabian, Native American & custom cultures
+- **Varied Cultural Traditions** — Indian, Japanese, African, Celtic, Chinese, Greek, Arabian, Native American & custom cultures
 - **Multiple Story Types** — Folk Tales, Mythology, Historical Stories, Moral Stories, Legends & more
 - **Customizable Tones** — Simple, Dramatic, Child-friendly, Mysterious, Humorous
 - **Multi-Language Support** — Generate stories in 15+ languages including Hindi, Bengali, Tamil, Spanish, French, Japanese, and more
