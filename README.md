@@ -102,15 +102,14 @@
 
 ```
 ikshanam/
-├── streamlit_app.py    # Main Streamlit application
-├── app.py              # Flask backend (alternative)
-├── story_service.py    # Story generation service
-├── video_service.py    # Video creation service
-├── requirements.txt    # Python dependencies
-├── .env.example        # Environment variables template
-├── static/             # Static assets (CSS, JS)
-├── templates/          # HTML templates
-└── outputs/            # Generated videos (gitignored)
+├── streamlit_app.py                # Main Streamlit application
+├── Ikshanam_Project_Notebook.ipynb # Project documentation notebook
+├── Ikshanam.png                    # Logo/banner image
+├── requirements.txt                # Python dependencies
+├── README.md                       # Project documentation
+├── .env                            # Environment variables (API keys)
+├── .gitignore                      # Git ignore rules
+└── outputs/                        # Generated videos (gitignored)
 ```
 
 ---
@@ -180,7 +179,7 @@ This project is for educational purposes.
 
 <div align="center">
 
-**Made with ❤️ by [Anushtup Dutta](https://github.com/d-anushtup)**
+**Made by [Anushtup Dutta](https://github.com/d-anushtup)**
 
 *"Every culture has stories worth telling. Ikshanam brings them to life."*
 

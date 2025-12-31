@@ -1,14 +1,22 @@
-# Environment variables (contains API keys!)
+# Environment variables (contains API keys)
 .env
 
-# Python virtual environment
+# Python
 venv/
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
 
-# Output files (generated videos/images)
+# Output files (generated videos/audio)
 outputs/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
 
 # macOS
 .DS_Store
@@ -16,10 +24,5 @@ outputs/
 # IDE
 .idea/
 .vscode/
-
-# Accidentally exposed API key file (delete this file!)
-gsk_*
-
-# MoviePy temp files
-*TEMP_MPY*
-*.mp4.tmp
+*.swp
+*.swo
