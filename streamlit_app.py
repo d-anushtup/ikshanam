@@ -1219,6 +1219,9 @@ if st.sidebar.button("🎬 Generate Story", type="primary", use_container_width=
             st.session_state['video_path'] = None
             st.session_state['translated_story'] = None
             st.session_state['dictionary_input'] = ""  # Clear dictionary search field
+            st.session_state['translation_input'] = ""  # Clear translation language field
+            st.session_state['custom_image_prompt'] = ""  # Clear custom image prompt field
+            st.session_state['generated_image'] = None  # Clear generated image
             
             # Auto-generate background image with unique seed and timeout
             import time
@@ -1351,6 +1354,93 @@ if st.session_state.get('story_data'):
             <strong>✨ {moral_label}:</strong> {data['moral']}
         </div>
         """, unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # Generate Image section
+    st.markdown('<h3 class="media-header">🖼️ Generate Image</h3>', unsafe_allow_html=True)
+    st.markdown('<p style="color: #CCCCCC; font-size: 0.9rem;">Create a custom AI-generated image based on the story or your own prompt</p>', unsafe_allow_html=True)
+    
+    # Image generation input
+    img_col1, img_col2 = st.columns([3, 1])
+    
+    with img_col1:
+        custom_image_prompt = st.text_input(
+            "Custom image prompt",
+            placeholder="Optional: Enter custom instructions for the image...",
+            label_visibility="collapsed",
+            key="custom_image_prompt"
+        )
+    
+    with img_col2:
+        generate_image_btn = st.button("🎨 Generate", use_container_width=True, key="generate_image_btn")
+    
+    # Handle image generation
+    if generate_image_btn:
+        with st.spinner("🎨 Creating your image..."):
+            import time
+            import base64
+            unique_seed = int(time.time() * 1000)
+            current_culture = st.session_state.get('culture', culture)
+            culture_short = current_culture.split(' ', 1)[1] if ' ' in current_culture else current_culture
+            
+            # Use custom prompt if provided, otherwise generate story-relevant prompt
+            if custom_image_prompt and custom_image_prompt.strip():
+                img_prompt = custom_image_prompt.strip()
+            else:
+                random_style = random.choice(["watercolor", "oil painting", "digital art", "fantasy art", "illustration", "concept art"])
+                img_prompt = f"Beautiful {random_style} for story '{data['title']}', {culture_short} cultural theme, mystical atmosphere, cinematic lighting, 4k quality, no text, unique composition"
+            
+            encoded_prompt = urllib.parse.quote(img_prompt)
+            
+            # Server-side fetch with timeout
+            generated_image_data = None
+            try:
+                img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&nologo=true&seed={unique_seed}"
+                response = requests.get(img_url, timeout=60)
+                if response.status_code == 200 and len(response.content) > 1000:
+                    generated_image_data = base64.b64encode(response.content).decode('utf-8')
+            except Exception as e:
+                pass  # Will use fallback
+            
+            # Fallback: create gradient if AI image failed
+            if not generated_image_data:
+                gradient_colors = {
+                    'Indian': [(255, 153, 51), (128, 0, 128)],
+                    'Japanese': [(255, 183, 197), (100, 149, 237)],
+                    'African': [(255, 140, 0), (139, 69, 19)],
+                    'Celtic': [(34, 139, 34), (75, 0, 130)],
+                    'Chinese': [(255, 0, 0), (255, 215, 0)],
+                    'Greek': [(30, 144, 255), (255, 255, 255)],
+                    'Egyptian': [(255, 215, 0), (139, 69, 19)],
+                    'Native American': [(210, 105, 30), (34, 139, 34)],
+                }
+                colors = gradient_colors.get(culture_short, [(50, 50, 100), (100, 50, 80)])
+                
+                fallback_img = Image.new('RGB', (800, 600))
+                for y in range(600):
+                    ratio = y / 600
+                    r = int(colors[0][0] * (1 - ratio) + colors[1][0] * ratio)
+                    g = int(colors[0][1] * (1 - ratio) + colors[1][1] * ratio)
+                    b = int(colors[0][2] * (1 - ratio) + colors[1][2] * ratio)
+                    for x in range(800):
+                        fallback_img.putpixel((x, y), (r, g, b))
+                
+                # Convert fallback to base64
+                buffer = BytesIO()
+                fallback_img.save(buffer, format='PNG')
+                generated_image_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            
+            st.session_state['generated_image'] = f"data:image/png;base64,{generated_image_data}"
+            st.rerun()
+    
+    # Display generated image if available
+    if st.session_state.get('generated_image'):
+        st.markdown(f'''
+        <div style="text-align: center; margin: 1rem 0;">
+            <img src="{st.session_state['generated_image']}" style="max-width: 60%; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);" alt="Generated Image">
+        </div>
+        ''', unsafe_allow_html=True)
     
     st.divider()
     
@@ -1574,7 +1664,7 @@ if st.session_state.get('story_data'):
     
     # Dictionary Lookup Section
     st.markdown('<h3 class="media-header">📖 Dictionary Lookup</h3>', unsafe_allow_html=True)
-    st.markdown('<p style="color: #CCCCCC; font-size: 0.9rem;">Look up the meaning of any word from the story</p>', unsafe_allow_html=True)
+    st.markdown('<p style="color: #CCCCCC; font-size: 0.9rem;">Stuck somewhere? Look up the meaning of any word.</p>', unsafe_allow_html=True)
     
     # Dictionary input
     dict_col1, dict_col2 = st.columns([3, 1])
@@ -1582,7 +1672,7 @@ if st.session_state.get('story_data'):
     with dict_col1:
         word_to_lookup = st.text_input(
             "Enter a word",
-            placeholder="Type a word to look up its meaning...",
+            placeholder="Type a word to find its meaning...",
             label_visibility="collapsed",
             key="dictionary_input"
         )
@@ -1656,15 +1746,16 @@ if st.session_state.get('story_data'):
     
     # Translation section
     st.markdown('<h3 class="media-header">🌐 Translate Story</h3>', unsafe_allow_html=True)
-    
+    st.markdown('<p style="color: #CCCCCC; font-size: 0.9rem;">Feel the essence as if at home! Translate the story into the language of your choice</p>', unsafe_allow_html=True)
     # Translation input
     trans_col1, trans_col2 = st.columns([3, 1])
     
     with trans_col1:
         target_language = st.text_input(
             "Enter target language",
-            placeholder="e.g., Hindi, Bengali, Marathi, Tamil, Maithili, Spanish, French...",
-            label_visibility="collapsed"
+            placeholder="Enter the language of your choice, e.g. Maithili, French, etc...",
+            label_visibility="collapsed",
+            key="translation_input"
         )
     
     with trans_col2:
@@ -1762,8 +1853,8 @@ else:
             </div>
             <div style="text-align: center; padding: 1rem;">
                 <div style="font-size: 2.5rem;">🎬</div>
-                <h4 style="color: #FFD700; margin: 0.5rem 0;">Video Creation</h4>
-                <p style="color: #CCCCCC; font-size: 0.9rem;">Generate beautiful videos with AI illustrations and captions</p>
+                <h4 style="color: #FFD700; margin: 0.5rem 0;">Image and Video Creation</h4>
+                <p style="color: #CCCCCC; font-size: 0.9rem;">Generate beautiful images and videos with the help of AI</p>
             </div>
             <div style="text-align: center; padding: 1rem;">
                 <div style="font-size: 2.5rem;">🌐</div>
