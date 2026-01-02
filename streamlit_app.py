@@ -1,8 +1,3 @@
-"""
-Ikshanam - A Smart Cultural Storyteller - Streamlit App
-A simple demo app for learning purposes using free tools only.
-Uses GROQ API for fast AI story generation for video.
-"""
 import streamlit as st
 import os
 from gtts import gTTS
@@ -383,46 +378,35 @@ st.markdown("""
 
 # Cultural knowledge for prompts
 CULTURES = {
-    "🇮🇳 Indian": "Indian culture with elements of dharma, karma, wisdom, festivals, and village life. Style: poetic with nature metaphors.",
-    "🇯🇵 Japanese": "Japanese culture with honor, nature spirits (kami), zen philosophy, cherry blossoms. Style: contemplative and elegant.",
-    "🌍 African": "African culture with community wisdom, animal tricksters like Anansi, ancestral spirits. Style: vibrant with proverbs.",
-    "☘️ Celtic": "Celtic culture with faeries, druids, ancient magic, sacred groves. Style: mystical and lyrical.",
-    "🇨🇳 Chinese": "Chinese culture with dragons, filial piety, immortals, Jade Emperor. Style: elegant and wise.",
-    "🏛️ Greek": "Greek culture with gods of Olympus, heroes, quests, fate. Style: epic and dramatic.",
-    "🏜️ Arabian": "Arabian culture with djinn, magic lamps, desert wisdom, merchants. Style: rich and ornate.",
-    "🦅 Native American": "Native American culture with animal spirits, creation stories, harmony with nature. Style: reverent and earthy."
+    "Indian": "Indian culture with elements of dharma, karma, wisdom, festivals, and village life. Style: poetic with nature metaphors.",
+    "Japanese": "Japanese culture with honor, nature spirits (kami), zen philosophy, cherry blossoms. Style: contemplative and elegant.",
+    "African": "African culture with community wisdom, animal tricksters like Anansi, ancestral spirits. Style: vibrant with proverbs.",
+    "Celtic": "Celtic culture with faeries, druids, ancient magic, sacred groves. Style: mystical and lyrical.",
+    "Chinese": "Chinese culture with dragons, filial piety, immortals, Jade Emperor. Style: elegant and wise.",
+    "Greek": "Greek culture with gods of Olympus, heroes, quests, fate. Style: epic and dramatic.",
+    "Arabian": "Arabian culture with djinn, magic lamps, desert wisdom, merchants. Style: rich and ornate.",
+    "Native American": "Native American culture with animal spirits, creation stories, harmony with nature. Style: reverent and earthy."
 }
 
-# Cultural color themes for video
-CULTURAL_THEMES = {
-    "🇮🇳 Indian": {"bg": "#2D1B00", "accent": "#FF6B35", "text": "#FFD700", "secondary": "#8B4513"},
-    "🇯🇵 Japanese": {"bg": "#1A1A2E", "accent": "#DC143C", "text": "#FFB7C5", "secondary": "#4A0E2E"},
-    "🌍 African": {"bg": "#1C1C1C", "accent": "#E07C24", "text": "#FFD700", "secondary": "#3D2914"},
-    "☘️ Celtic": {"bg": "#0D1B2A", "accent": "#228B22", "text": "#C0C0C0", "secondary": "#1B4332"},
-    "🇨🇳 Chinese": {"bg": "#1A0A0A", "accent": "#DC143C", "text": "#FFD700", "secondary": "#4A0E0E"},
-    "🏛️ Greek": {"bg": "#0A1628", "accent": "#0066CC", "text": "#FFFFFF", "secondary": "#1A365D"},
-    "🏜️ Arabian": {"bg": "#1A1A2E", "accent": "#C19A6B", "text": "#FFD700", "secondary": "#3D2914"},
-    "🦅 Native American": {"bg": "#1C1C1C", "accent": "#CD853F", "text": "#40E0D0", "secondary": "#2F1810"}
-}
 
-STORY_TYPES = ["Folk Tale", "Mythology", "Historical Story", "Moral Story", "Legend", "✏️ Other (type below)"]
-TONES = ["Simple & Easy", "Dramatic & Epic", "Child-friendly", "Mysterious", "Humorous", "✏️ Other (type below)"]
-LANGUAGES = ["English", "Hindi", "Bengali", "Marathi", "Tamil", "Telugu", "Kannada", "Malayalam", "Gujarati", "Punjabi", "Maithili", "Spanish", "French", "German", "Japanese", "Chinese", "Arabic", "✏️ Other (type below)"]
+STORY_TYPES = ["Folk Tale", "Mythology", "Historical Story", "Moral Story", "Legend", "Other (type below)"]
+TONES = ["Simple & Easy", "Dramatic & Epic", "Child-friendly", "Mysterious", "Humorous", "Other (type below)"]
+LANGUAGES = ["English", "Bengali", "Marathi", "Odia", "Assamese", "Maithili", "Malayalam", "Tamil", "Gujarati", "Punjabi", "Italian", "Spanish", "French", "German", "Japanese", "Chinese", "Arabic", "Other (type below)"]
 
 # Available narration voices (Edge TTS Neural Voices - free and high quality)
 NARRATION_VOICES = {
-    "🎙️ Jenny (US, Clear)": "en-US-JennyNeural",
-    "🎙️ Aria (US, Warm)": "en-US-AriaNeural",
-    "🎙️ Guy (US, Male)": "en-US-GuyNeural",
-    "🎙️ Davis (US, Male Deep)": "en-US-DavisNeural",
-    "🎙️ Sonia (UK, Expressive)": "en-GB-SoniaNeural",
-    "🎙️ Ryan (UK, Male)": "en-GB-RyanNeural",
-    "🎙️ Natasha (AU, Female)": "en-AU-NatashaNeural",
-    "🎙️ William (AU, Male)": "en-AU-WilliamNeural",
-    "🎙️ Libby (UK, Warm)": "en-GB-LibbyNeural",
-    "🎙️ Maisie (UK, Young)": "en-GB-MaisieNeural",
-    "🎙️ Ana (US, Child)": "en-US-AnaNeural",
-    "🎙️ Christopher (US, News)": "en-US-ChristopherNeural",
+    "Jenny (US, Clear)": "en-US-JennyNeural",
+    "Aria (US, Warm)": "en-US-AriaNeural",
+    "Guy (US, Male)": "en-US-GuyNeural",
+    "Davis (US, Male Deep)": "en-US-DavisNeural",
+    "Sonia (UK, Expressive)": "en-GB-SoniaNeural",
+    "Ryan (UK, Male)": "en-GB-RyanNeural",
+    "Natasha (AU, Female)": "en-AU-NatashaNeural",
+    "William (AU, Male)": "en-AU-WilliamNeural",
+    "Libby (UK, Warm)": "en-GB-LibbyNeural",
+    "Maisie (UK, Young)": "en-GB-MaisieNeural",
+    "Ana (US, Child)": "en-US-AnaNeural",
+    "Christopher (US, News)": "en-US-ChristopherNeural",
 }
 
 # Sidebar for inputs
@@ -435,30 +419,30 @@ custom_prompt = st.sidebar.text_area(
 )
 
 # Culture selection with custom option
-culture_options = list(CULTURES.keys()) + ["✏️ Other (type below)"]
+culture_options = list(CULTURES.keys()) + ["Other (type below)"]
 culture_choice = st.sidebar.selectbox("🌍 Choose Culture", culture_options)
-if culture_choice == "✏️ Other (type below)":
+if culture_choice == "Other (type below)":
     culture = st.sidebar.text_input("Enter culture:", placeholder="e.g., Korean, Persian, Slavic...")
 else:
     culture = culture_choice
 
 # Story Type selection with custom option
 story_type_choice = st.sidebar.selectbox("📖 Story Type", STORY_TYPES)
-if story_type_choice == "✏️ Other (type below)":
+if story_type_choice == "Other (type below)":
     story_type = st.sidebar.text_input("Enter story type:", placeholder="e.g., Fable, Parable, Epic...")
 else:
     story_type = story_type_choice
 
 # Tone selection with custom option
 tone_choice = st.sidebar.selectbox("🎭 Tone", TONES)
-if tone_choice == "✏️ Other (type below)":
+if tone_choice == "Other (type below)":
     tone = st.sidebar.text_input("Enter tone:", placeholder="e.g., Romantic, Philosophical, Adventurous...")
 else:
     tone = tone_choice
 
 # Language selection
 language_choice = st.sidebar.selectbox("🗣️ Story Language", LANGUAGES, index=0)
-if language_choice == "✏️ Other (type below)":
+if language_choice == "Other (type below)":
     story_language = st.sidebar.text_input("Enter language:", placeholder="e.g., Odia, Nepali, Portuguese...")
 else:
     story_language = language_choice
@@ -467,13 +451,13 @@ else:
 # Check API key
 api_key = os.getenv("GROQ_API_KEY")
 if not api_key:
-    st.warning("⚠️ Please set GROQ_API_KEY environment variable to generate stories.")
+    st.warning("Please set GROQ_API_KEY environment variable to generate stories.")
     st.code("export GROQ_API_KEY='your-key-here'", language="bash")
     st.info("Get your free API key at: https://console.groq.com/keys")
     st.stop()
 
 if not GROQ_AVAILABLE:
-    st.error("❌ Groq package not installed. Run: pip install groq")
+    st.error("Groq package not installed. Run: pip install groq")
     st.stop()
 
 # Generate story function using GROQ
@@ -866,13 +850,6 @@ def generate_audio(text, output_path, voice_id=None):
     except Exception as e:
         return None, str(e)
 
-
-# Helper to convert hex to RGB
-def hex_to_rgb(hex_color):
-    hex_color = hex_color.lstrip('#')
-    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-
-
 # Generate video function with FFmpeg for high quality
 def generate_video(story_data, output_dir, voice_id=None):
     """Generate a high-quality story video using FFmpeg with transitions.
@@ -1140,8 +1117,6 @@ if 'audio_path' not in st.session_state:
     st.session_state['audio_path'] = None
 if 'video_path' not in st.session_state:
     st.session_state['video_path'] = None
-if 'srt_path' not in st.session_state:
-    st.session_state['srt_path'] = None
 if 'vtt_content' not in st.session_state:
     st.session_state['vtt_content'] = None
 if 'translated_story' not in st.session_state:
@@ -1210,7 +1185,6 @@ if st.sidebar.button("🎬 Generate Story", type="primary", use_container_width=
             
             # Store in session state - reset media
             st.session_state['story_data'] = parsed_story
-            st.session_state['raw_story'] = story_text
             st.session_state['culture'] = culture
             st.session_state['story_type'] = story_type
             st.session_state['tone'] = tone
@@ -1299,7 +1273,7 @@ if st.session_state.get('story_data'):
         <div style="margin: 1rem 0; border-radius: 15px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.3); position: relative; z-index: 1;">
             <img src="{bg_image_url}" style="width: 100%; height: auto; display: block; position: relative;" alt="AI-Generated Story Illustration">
         </div>
-        <p style="text-align: center; color: #888; font-size: 0.9rem; margin-top: -0.5rem;">✨ AI-Generated Story Illustration</p>
+        <p style="text-align: center; color: #888; font-size: 0.9rem; margin-top: -0.5rem;">AI-Generated Story Illustration</p>
         ''', unsafe_allow_html=True)
     
     # Story content
@@ -1434,15 +1408,6 @@ if st.session_state.get('story_data'):
             st.session_state['generated_image'] = f"data:image/png;base64,{generated_image_data}"
             st.rerun()
     
-    # Display generated image if available
-    if st.session_state.get('generated_image'):
-        st.markdown(f'''
-        <div style="text-align: center; margin: 1rem 0;">
-            <img src="{st.session_state['generated_image']}" style="max-width: 60%; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);" alt="Generated Image">
-        </div>
-        ''', unsafe_allow_html=True)
-    
-    st.divider()
     
     # Media section header
     st.markdown('<h3 class="media-header">🎬 Generate Media</h3>', unsafe_allow_html=True)
@@ -1503,7 +1468,6 @@ if st.session_state.get('story_data'):
                     if srt_path and os.path.exists(srt_path):
                         final_srt = output_dir / "captions.srt"
                         shutil.copy(srt_path, str(final_srt))
-                        st.session_state['srt_path'] = str(final_srt)
                         
                         # Convert SRT to VTT format for HTML5 video
                         with open(srt_path, 'r', encoding='utf-8') as f:
@@ -1659,6 +1623,16 @@ if st.session_state.get('story_data'):
                 "video/mp4", 
                 key="dl_video"
             )
+    
+    st.divider()
+
+    # Display generated image if available
+    if st.session_state.get('generated_image'):
+        st.markdown(f'''
+        <div style="text-align: center; margin: 1rem 0;">
+            <img src="{st.session_state['generated_image']}" style="max-width: 60%; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);" alt="Generated Image">
+        </div>
+        ''', unsafe_allow_html=True)
     
     st.divider()
     
@@ -1858,8 +1832,8 @@ else:
             </div>
             <div style="text-align: center; padding: 1rem;">
                 <div style="font-size: 2.5rem;">🌐</div>
-                <h4 style="color: #FFD700; margin: 0.5rem 0;">Translation</h4>
-                <p style="color: #CCCCCC; font-size: 0.9rem;">Translate stories into various languages instantly</p>
+                <h4 style="color: #FFD700; margin: 0.5rem 0;">Dictionary Look-up & Translation</h4>
+                <p style="color: #CCCCCC; font-size: 0.9rem;">Translate stories into various languages instantly, along with lingual support</p>
             </div>
         </div>
     </div>
@@ -1898,6 +1872,6 @@ else:
 st.divider()
 st.markdown("""
 <div style="text-align: center; color: #CCCCCC; padding: 1rem;">
-    <small>Powered by GROQ AI (Llama 3.3) • Built for Learning</small>
+    <small>Powered by GROQ AI (Llama 3.3) • Built for Learning, by Anushtup Dutta</small>
 </div>
 """, unsafe_allow_html=True)

@@ -94,7 +94,7 @@
 - **AI Engine**: [Groq](https://groq.com) — Ultra-fast LLM inference (Llama 3.3 70B)
 - **Text-to-Speech**: [Edge TTS](https://github.com/rany2/edge-tts) — Natural neural voices
 - **Video Generation**: [MoviePy](https://zulko.github.io/moviepy/) — Video composition
-- **Image Processing**: [Pillow](https://pillow.readthedocs.io/) — Cultural-themed visuals
+- **Image Generation**: [Pollinations.ai](https://pollinations.ai/) — Free AI image generation
 
 ---
 
@@ -141,19 +141,17 @@ graph LR
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GROQ_API_KEY` | Yes | Your Groq API key for story generation |
-| `GEMINI_API_KEY` | Optional | Google Gemini key (for Flask app) |
 
 ### Customization
 
 - Modify `CULTURES` dictionary to add new cultures
-- Adjust `CULTURAL_THEMES` for video color schemes
 - Add new voices in `NARRATION_VOICES`
 
 ---
 
 ## License
 
-This project is for educational purposes.
+This project is for educational purposes only.
 
 ---
 
