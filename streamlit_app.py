@@ -552,6 +552,10 @@ def generate_ai_image(prompt, hf_token, width=800, height=400, fallback_culture=
     """
     import base64
 
+    # Ensure width and height are multiples of 16 (required by Together API)
+    width = int(round(width / 16.0) * 16)
+    height = int(round(height / 16.0) * 16)
+
     if hf_token:
         try:
             hf_url = "https://router.huggingface.co/together/v1/images/generations"
@@ -1160,7 +1164,7 @@ def generate_audio(text, output_path, voice_id=None, language=None):
         return None, str(e)
 
 # Generate video function with FFmpeg for high quality
-def generate_video(story_data, output_dir, voice_id=None, language=None):
+def generate_video(story_data, output_dir, voice_id=None, language=None, hf_token=None):
     """Generate a high-quality story video using FFmpeg with transitions.
     
     Args:
@@ -1219,9 +1223,25 @@ def generate_video(story_data, output_dir, voice_id=None, language=None):
         # Create a single background image for the whole video
         single_img_path = temp_dir / "background.png"
         
-        # Generate artistic background image for video
-        bg_img = generate_cultural_background(culture_short, width=854, height=480, title=title)
-        bg_img.save(str(single_img_path), quality=95)
+        # Generate AI image via HF Router (FLUX.1-schnell), fallback to Pillow gradient
+        import base64
+        video_prompt = (
+            f"{culture_short} cultural scene, {title}, "
+            f"traditional folklore art, vibrant colors, detailed illustration, cinematic"
+        )
+        data_url, _img_err = generate_ai_image(
+            prompt=video_prompt,
+            hf_token=hf_token,
+            width=864,
+            height=480,
+            fallback_culture=culture_short,
+            fallback_title=title,
+        )
+        # Decode data URL → raw bytes → save to file
+        header, b64_data = data_url.split(",", 1)
+        img_bytes = base64.b64decode(b64_data)
+        with open(str(single_img_path), "wb") as f:
+            f.write(img_bytes)
         
         # Use the same image for all scenes
         for i in range(len(scenes)):
@@ -1616,7 +1636,7 @@ if st.session_state.get('story_data'):
         with st.spinner("Creating story video... This may take a minute."):
             with tempfile.TemporaryDirectory() as temp_dir:
                 story_lang = st.session_state.get('story_language', 'English')
-                video_path, srt_path, error = generate_video(data, temp_dir, voice_id=selected_voice, language=story_lang)
+                video_path, srt_path, error = generate_video(data, temp_dir, voice_id=selected_voice, language=story_lang, hf_token=hf_token)
                 if error:
                     st.error(f"Video error: {error}")
                 else:
@@ -1669,7 +1689,7 @@ if st.session_state.get('story_data'):
         with caption_col1:
             st.markdown('<p style="color: #90EE90; font-weight: bold; margin: 0; padding-top: 5px;">Show Captions</p>', unsafe_allow_html=True)
         with caption_col2:
-            show_captions = st.toggle("", value=st.session_state.get('show_captions', True), key="caption_toggle", label_visibility="collapsed")
+            show_captions = st.toggle("Show Captions", value=st.session_state.get('show_captions', True), key="caption_toggle", label_visibility="collapsed")
         st.session_state['show_captions'] = show_captions
         
         video_path = st.session_state['video_path']
