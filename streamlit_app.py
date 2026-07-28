@@ -440,7 +440,7 @@ LANGUAGE_VOICES = {
     "english": ("en-US-JennyNeural", "en"),
 }
 
-# --- Artistic Background Generator (replaces Pollinations.ai) ---
+# --- Artistic Background Generator (Pillow fallback) ---
 def generate_cultural_background(culture_name, width=800, height=400, title=""):
     """Generate a beautiful artistic background image for a given culture using Pillow.
     
@@ -541,6 +541,57 @@ def generate_cultural_background(culture_name, width=800, height=400, title=""):
     
     return img
 
+
+# --- AI Image Generator via HF Router (Together / FLUX.1-schnell) ---
+def generate_ai_image(prompt, hf_token, width=800, height=400, fallback_culture="", fallback_title=""):
+    """Generate an image using FLUX.1-schnell via the HF Router (Together provider).
+    
+    Returns a data-URL string ready for use in an <img src="...">.
+    Falls back to the Pillow gradient generator if HF is unavailable.
+    Returns (data_url: str, error: str|None).
+    """
+    import base64
+
+    if hf_token:
+        try:
+            hf_url = "https://router.huggingface.co/together/v1/images/generations"
+            hf_headers = {
+                "Authorization": f"Bearer {hf_token}",
+                "Content-Type": "application/json",
+            }
+            hf_payload = {
+                "model": "black-forest-labs/FLUX.1-schnell",
+                "prompt": prompt,
+                "n": 1,
+                "width": width,
+                "height": height,
+                "steps": 4,
+                "response_format": "b64_json",
+            }
+            resp = requests.post(hf_url, headers=hf_headers, json=hf_payload, timeout=60)
+            if resp.status_code == 200:
+                b64 = resp.json()["data"][0].get("b64_json", "")
+                if b64:
+                    return f"data:image/jpeg;base64,{b64}", None
+                else:
+                    err = "HF returned 200 but no b64_json field."
+            else:
+                err = f"HF API error {resp.status_code}: {resp.text[:200]}"
+        except requests.exceptions.Timeout:
+            err = "Request timed out — try again shortly."
+        except Exception as e:
+            err = f"Unexpected error: {e}"
+    else:
+        err = "HF_TOKEN not set in .env or Streamlit secrets."
+
+    # Fallback: Pillow gradient
+    culture_name = fallback_culture
+    pil_img = generate_cultural_background(culture_name, width=width, height=height, title=fallback_title)
+    buf = BytesIO()
+    pil_img.save(buf, format="PNG")
+    fb_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return f"data:image/png;base64,{fb_b64}", err
+
 # Sidebar for inputs
 st.sidebar.header("Create Your Story")
 
@@ -593,6 +644,13 @@ if not api_key:
     st.info("**Streamlit Cloud:** Go to App Settings → Secrets and add:\n```\nGROQ_API_KEY = \"your-key-here\"\n```")
     st.info("Get your free API key at: https://console.groq.com/keys")
     st.stop()
+
+# Load Hugging Face token for AI image generation (optional — falls back to Pillow gradient)
+hf_token = None
+try:
+    hf_token = st.secrets["HF_TOKEN"]
+except Exception:
+    hf_token = os.getenv("HF_TOKEN")
 
 if not GROQ_AVAILABLE:
     st.error("Groq package not installed. Run: pip install groq")
@@ -1415,14 +1473,23 @@ if st.sidebar.button("Generate Story", type="primary", use_container_width=True)
             st.session_state['custom_image_prompt'] = ""  # Clear custom image prompt field
             st.session_state['generated_image'] = None  # Clear generated image
             
-            # Auto-generate artistic background image
+            # Auto-generate AI story background image
             import base64
             culture_short = culture.split(' ', 1)[1] if ' ' in culture else culture
-            bg_img = generate_cultural_background(culture_short, width=800, height=400, title=parsed_story.get('title', ''))
-            buffer = BytesIO()
-            bg_img.save(buffer, format='PNG')
-            bg_image_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            st.session_state['bg_image_url'] = f"data:image/png;base64,{bg_image_data}"
+            story_title = parsed_story.get('title', '')
+            bg_prompt = (
+                f"{culture_short} cultural scene, {story_title}, "
+                f"traditional folklore art, vibrant colors, detailed illustration, cinematic"
+            )
+            bg_data_url, _bg_err = generate_ai_image(
+                prompt=bg_prompt,
+                hf_token=hf_token,
+                width=800,
+                height=400,
+                fallback_culture=culture_short,
+                fallback_title=story_title,
+            )
+            st.session_state['bg_image_url'] = bg_data_url
       # (end of the else block from the on-topic guardrail)
 
 # Display story if available, otherwise show welcome page
@@ -1748,19 +1815,32 @@ if st.session_state.get('story_data'):
     
     # Handle image generation
     if generate_image_btn:
-        with st.spinner("Creating your image..."):
-            import time
-            import base64
-            unique_seed = int(time.time() * 1000)
+        with st.spinner("Generating AI image..."):
             current_culture = st.session_state.get('culture', culture)
             culture_short = current_culture.split(' ', 1)[1] if ' ' in current_culture else current_culture
-            
-            # Generate artistic cultural background image
-            gen_img = generate_cultural_background(culture_short, width=800, height=400, title=data.get('title', ''))
-            buffer = BytesIO()
-            gen_img.save(buffer, format='PNG')
-            generated_image_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            st.session_state['generated_image'] = f"data:image/png;base64,{generated_image_data}"
+            story_title = data.get('title', '')
+
+            # Build prompt: prefer user-supplied text, otherwise derive from story context
+            if custom_image_prompt and custom_image_prompt.strip():
+                img_prompt = custom_image_prompt.strip()
+            else:
+                img_prompt = (
+                    f"{culture_short} cultural art style, {story_title}, "
+                    f"traditional folklore illustration, vibrant colors, "
+                    f"detailed mythological scene, cinematic lighting"
+                )
+
+            data_url, err = generate_ai_image(
+                prompt=img_prompt,
+                hf_token=hf_token,
+                width=800,
+                height=400,
+                fallback_culture=culture_short,
+                fallback_title=story_title,
+            )
+            if err:
+                st.warning(f"AI image unavailable — showing gradient instead. ({err})")
+            st.session_state['generated_image'] = data_url
             st.rerun()
 
     # Display generated image if available
