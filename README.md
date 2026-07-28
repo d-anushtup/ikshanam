@@ -58,6 +58,7 @@
    ```bash
    # Create a .env file
    echo "GROQ_API_KEY=your-api-key-here" > .env
+   echo "HF_TOKEN=your-api-key-here" > .env
    ```
    
    Get your free API key at [console.groq.com/keys](https://console.groq.com/keys)
@@ -94,7 +95,7 @@
 - **AI Engine**: [Groq](https://groq.com) - Ultra-fast LLM inference (Llama 3.3 70B)
 - **Text-to-Speech**: [Edge TTS](https://github.com/rany2/edge-tts) - Natural neural voices
 - **Video Generation**: [MoviePy](https://zulko.github.io/moviepy/) - Video composition
-- **Image Generation**: [Pollinations.ai](https://pollinations.ai/) - Free AI image generation
+- **Image Generation**: [Hugging Face](https://huggingface.co/) - Free AI image generation
 
 ---
 
@@ -139,7 +140,8 @@ graph LR
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GROQ_API_KEY` | Yes | Your Groq API key for story generation |
+| `GROQ_API_KEY` | Yes | GROQ API key for story generation |
+| `HF_TOKEN` | Yes | Hugging Face API key for image generation |
 
 ### Customization
 
@@ -157,6 +159,7 @@ This project is for educational purposes only.
 ## Acknowledgments
 
 - [Groq](https://groq.com) for AI inference
+- [Hugging Face](https://huggingface.co/) for AI inference
 - [Streamlit](https://streamlit.io) for the framework
 - [Microsoft Edge TTS](https://github.com/rany2/edge-tts) for neural voices
 - Inspired by storytelling traditions from around the world
